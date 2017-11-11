@@ -80,6 +80,7 @@ public class SimpleFakeTweetGenerator extends JPanel {
         gbc = new GridBagConstraints();
         gbc.gridy = row - 1;
         gbc.gridx = 1;
+        gbc.weightx = 1.0;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(0, 0, 5, 0);
         this.add(nameTF, gbc);
@@ -104,6 +105,8 @@ public class SimpleFakeTweetGenerator extends JPanel {
         gbc = new GridBagConstraints();
         gbc.gridy = row - 1;
         gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        gbc.weighty = 1.0;
         gbc.insets = new Insets(0, 0, 5, 0);
         gbc.fill = GridBagConstraints.BOTH;
         this.add(scrollPane, gbc);
@@ -128,6 +131,7 @@ public class SimpleFakeTweetGenerator extends JPanel {
         gbc = new GridBagConstraints();
         gbc.gridy = row - 1;
         gbc.gridwidth = 2;
+        gbc.weightx = 1.0;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(0, 0, 5, 0);
         this.add(geoPanel, gbc);
