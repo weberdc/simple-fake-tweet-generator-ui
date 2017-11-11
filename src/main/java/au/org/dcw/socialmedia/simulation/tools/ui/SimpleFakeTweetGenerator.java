@@ -151,6 +151,7 @@ public class SimpleFakeTweetGenerator extends JPanel {
                 System.out.println(json);
             }
         });
+
     }
 
     private String generateJSON(final Map<String, Object> tweet) {

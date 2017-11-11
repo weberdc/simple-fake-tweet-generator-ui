@@ -5,9 +5,12 @@ import javax.swing.JFormattedTextField;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JRadioButton;
+import javax.swing.JTextField;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.stream.DoubleStream;
 import java.util.stream.Stream;
 
@@ -92,6 +95,41 @@ public class GeoPanel extends JPanel {
         final ButtonGroup radioGroup = new ButtonGroup();
         radioGroup.add(geoFromGoogle);
         radioGroup.add(geoFromLatLong);
+
+        latLonTF.addMouseListener(new Clicker(() -> radioGroup.setSelected(geoFromGoogle.getModel(), true)));
+        latTF.addMouseListener(new Clicker(() -> radioGroup.setSelected(geoFromLatLong.getModel(), true)));
+        lonTF.addMouseListener(new Clicker(() -> radioGroup.setSelected(geoFromLatLong.getModel(), true)));
+
+        latLonTF.addMouseListener(new SelectAllText(latLonTF));
+        latTF.addMouseListener(new SelectAllText(latTF));
+        lonTF.addMouseListener(new SelectAllText(lonTF));
+    }
+
+    class Clicker extends MouseAdapter {
+        private final Runnable runnable;
+
+        public Clicker(Runnable runnable) {
+            this.runnable = runnable;
+        }
+
+        @Override
+        public void mouseClicked(MouseEvent e) {
+            runnable.run();
+        }
+    }
+
+    class SelectAllText extends MouseAdapter {
+        private final JTextField tf;
+
+        public SelectAllText(JTextField tf) {
+            this.tf = tf;
+        }
+
+        @Override
+        public void mouseClicked(MouseEvent e) {
+            tf.setSelectionStart(0);
+            tf.setSelectionEnd(tf.getText().length());
+        }
     }
 
     public double[] getLatLon() {
