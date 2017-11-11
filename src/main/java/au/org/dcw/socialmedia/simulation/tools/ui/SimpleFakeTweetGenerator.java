@@ -12,6 +12,7 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.WindowConstants;
@@ -96,14 +97,16 @@ public class SimpleFakeTweetGenerator extends JPanel {
         textArea = new JTextArea(4, 30);
         textArea.setLineWrap(true);
         textArea.setWrapStyleWord(true);
-        textArea.setBorder(nameTF.getBorder());
+
+        final JScrollPane scrollPane = new JScrollPane(textArea);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 
         gbc = new GridBagConstraints();
         gbc.gridy = row - 1;
         gbc.gridx = 1;
         gbc.insets = new Insets(0, 0, 5, 0);
         gbc.fill = GridBagConstraints.BOTH;
-        this.add(textArea, gbc);
+        this.add(scrollPane, gbc);
 
         // Row 3: use geo checkbox
         row = 3;
