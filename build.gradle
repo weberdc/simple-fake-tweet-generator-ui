@@ -1,0 +1,25 @@
+apply plugin: 'java'
+apply plugin: 'application'
+apply plugin: 'idea'
+
+task wrapper(type: Wrapper) {
+  gradleVersion = '4.3'
+}
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+// Define the main class for the application
+mainClassName = 'au.org.dcw.socialmedia.simulation.tools.ui.SimpleFakePostGenerator'
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+    compile 'com.fasterxml.jackson.core:jackson-databind:2.9.1'
+    compile 'com.google.guava:guava:23.0'
+
+    // Use JUnit test framework
+    //testCompile 'junit:junit:4.12'
+}
