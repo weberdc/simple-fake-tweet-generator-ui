@@ -10,7 +10,7 @@ sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
 // Define the main class for the application
-mainClassName = 'au.org.dcw.socialmedia.simulation.tools.ui.SimpleFakePostGenerator'
+mainClassName = 'au.org.dcw.socialmedia.simulation.tools.ui.SimpleFakeTweetGenerator'
 
 repositories {
     jcenter()
