@@ -1,3 +1,18 @@
+/*
+ * Copyright 2017 Derek Weber
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package au.org.dcw.socialmedia.simulation.tools.ui;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -16,18 +31,24 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.WindowConstants;
-import java.awt.Component;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Toolkit;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.StringSelection;
+import java.io.File;
+import java.io.IOException;
+import java.io.Reader;
+import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Random;
 import java.util.stream.IntStream;
 
-public class SimpleFakeTweetGenerator extends JPanel {
+public class SimpleFakeTweetGeneratorUI extends JPanel {
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final int ID_LENGTH = 16;
@@ -39,12 +60,42 @@ public class SimpleFakeTweetGenerator extends JPanel {
     private GeoPanel geoPanel;
 
     public static void main(String[] args) {
-        SimpleFakeTweetGenerator theApp = new SimpleFakeTweetGenerator();
+        SimpleFakeTweetGeneratorUI theApp = new SimpleFakeTweetGeneratorUI();
+
+        loadProxyProperties();
 
         theApp.run();
     }
 
-    public void run() {
+    /**
+     * Loads proxy information from <code>"./proxy.properties"</code> if it is
+     * present. If a proxy host and username are specified by no password, the
+     * user is asked to type it in via stdin.
+     *
+     * @return A {@link Properties} map with proxy credentials.
+     */
+    private static Properties loadProxyProperties() {
+        final Properties properties = new Properties();
+        final String proxyFile = "./proxy.properties";
+        if (new File(proxyFile).exists()) {
+            boolean success = true;
+            try (Reader fileReader = Files.newBufferedReader(Paths.get(proxyFile))) {
+                properties.load(fileReader);
+            } catch (IOException e) {
+                System.err.println("Attempted and failed to load " + proxyFile + ": " + e.getMessage());
+                success = false;
+            }
+            if (success && !properties.containsKey("http.proxyPassword")) {
+                char[] password = System.console().readPassword("Please type in your proxy password: ");
+                properties.setProperty("http.proxyPassword", new String(password));
+                properties.setProperty("https.proxyPassword", new String(password));
+            }
+            properties.forEach((k, v) -> System.setProperty(k.toString(), v.toString()));
+        }
+        return properties;
+    }
+
+    private void run() {
         // Create and set up the window
         JFrame frame = new JFrame("Create JSON for fake tweet");
         frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
@@ -147,7 +198,7 @@ public class SimpleFakeTweetGenerator extends JPanel {
 
         // BEHAVIOUR
         useGeoCheckbox.addActionListener(e -> {
-            recursivelyEnable(geoPanel, useGeoCheckbox.isSelected());
+            recursivelySetEnabled(geoPanel, useGeoCheckbox.isSelected());
         });
         genButton.addActionListener(e -> {
             final Map<String, Object> tweet = buildSimpleTweet();
@@ -165,7 +216,7 @@ public class SimpleFakeTweetGenerator extends JPanel {
             return JSON.writeValueAsString(tweet);
         } catch (JsonProcessingException e1) {
             JOptionPane.showMessageDialog(
-                SimpleFakeTweetGenerator.this,
+                SimpleFakeTweetGeneratorUI.this,
                 "Error creating JSON:\n" + e1.getMessage(),
                 "Error",
                 JOptionPane.WARNING_MESSAGE
@@ -178,7 +229,7 @@ public class SimpleFakeTweetGenerator extends JPanel {
     private Map<String, Object> buildSimpleTweet() {
         Map<String, Object> tweet = Maps.newTreeMap();
         String id = generateID().toString();
-        tweet.put("id", id);
+        tweet.put("id", BigDecimal.valueOf(Double.parseDouble(id)));
         tweet.put("id_str", id);
         tweet.put("text", textArea.getText());
         tweet.put("full_text", textArea.getText());
@@ -214,13 +265,13 @@ public class SimpleFakeTweetGenerator extends JPanel {
         clipboard.setContents(new StringSelection(s), null);
     }
 
-    private void recursivelyEnable(JComponent component, boolean enabled) {
+    private void recursivelySetEnabled(JComponent component, boolean enabled) {
         component.setEnabled(enabled);
         final int numChildren = component.getComponentCount();
         if (numChildren > 0) {
             IntStream.range(0, numChildren).forEach(i -> {
                 if (component.getComponent(i) instanceof JComponent) {
-                    recursivelyEnable((JComponent) component.getComponent(i), enabled);
+                    recursivelySetEnabled((JComponent) component.getComponent(i), enabled);
                 }
             });
         }

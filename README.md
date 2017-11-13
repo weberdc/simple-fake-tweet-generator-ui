@@ -28,6 +28,7 @@ to visually select a geolocation.
  + Java Development Kit 1.8
  + [Google Guava](https://github.com/google/guava) (Apache 2.0 licence) 
  + [FasterXML](http://wiki.fasterxml.com/JacksonHome) (Apache 2.0 licence)
+ + [JXMapViewer2](https://github.com/msteiger/jxmapviewer2) (LGPLv3)
 
 Built with [Gradle 4.3](http://gradle.org), included via the wrapper.
 
@@ -45,6 +46,15 @@ By running
 you will create an installable copy of the app in `PROJECT_ROOT/build/simple-fake-tweet-generator-ui`.
 
 
+## Configuration
+
+If running the app behind a proxy or filewall, copy the
+`proxy.properties-template` file to a file named `proxy.properties` and set the
+properties inside to your proxy credentials. If you feel uncomfortable putting
+your proxy password in the file, leave the password-related ones commented and
+the app will ask for the password.
+
+
 ## Usage
 If you've just downloaded the binary distribution, do this from within the
 unzipped archive (i.e. in the `simple-fake-tweet-generator-ui` directory). 
@@ -52,7 +62,7 @@ Otherwise, if you've just built the app from source, do this from within
 `PROJECT_ROOT/build/install/simple-fake-tweet-generator-ui`:
 
 <pre>
-Usage: bin/fetch-tweets[.bat]
+Usage: bin/simple-fake-tweet-generator-ui[.bat]
 </pre>
 
 Run the app with no other commandline arguments:
