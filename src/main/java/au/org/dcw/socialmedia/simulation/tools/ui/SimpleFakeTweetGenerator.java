@@ -53,7 +53,6 @@ public class SimpleFakeTweetGenerator extends JPanel {
         frame.setContentPane(this);
 
         // Display the window
-//        frame.setSize(500, 700);
         frame.pack();
         frame.setVisible(true);
     }
