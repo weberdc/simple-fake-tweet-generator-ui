@@ -19,7 +19,4 @@ repositories {
 dependencies {
     compile 'com.fasterxml.jackson.core:jackson-databind:2.9.1'
     compile 'com.google.guava:guava:23.0'
-
-    // Use JUnit test framework
-    //testCompile 'junit:junit:4.12'
 }
