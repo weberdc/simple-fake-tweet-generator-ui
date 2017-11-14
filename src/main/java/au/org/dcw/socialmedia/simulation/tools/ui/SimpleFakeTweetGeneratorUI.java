@@ -43,12 +43,20 @@ import java.io.Reader;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.stream.IntStream;
 
 public class SimpleFakeTweetGeneratorUI extends JPanel {
+
+    public static final DateTimeFormatter TWITTER_TIMESTAMP_FORMAT =
+        DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss ZZZ yyyy", Locale.ENGLISH);
+
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final int ID_LENGTH = 16;
@@ -229,6 +237,7 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
     private Map<String, Object> buildSimpleTweet() {
         Map<String, Object> tweet = Maps.newTreeMap();
         String id = generateID().toString();
+        tweet.put("created_at", TWITTER_TIMESTAMP_FORMAT.format(ZonedDateTime.now()));
         tweet.put("id", BigDecimal.valueOf(Double.parseDouble(id)));
         tweet.put("id_str", id);
         tweet.put("text", textArea.getText());
