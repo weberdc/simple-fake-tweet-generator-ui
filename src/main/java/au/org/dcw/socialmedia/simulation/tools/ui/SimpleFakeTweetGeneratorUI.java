@@ -15,6 +15,9 @@
  */
 package au.org.dcw.socialmedia.simulation.tools.ui;
 
+import com.beust.jcommander.JCommander;
+import com.beust.jcommander.Parameter;
+import com.beust.jcommander.ParameterException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Maps;
@@ -57,10 +60,13 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
     public static final DateTimeFormatter TWITTER_TIMESTAMP_FORMAT =
         DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss ZZZ yyyy", Locale.ENGLISH);
 
+    @Parameter(names = {"--skip-date"}, description = "Don't bother creating a 'created_at' field.")
+    private static boolean skipDate = false;
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final int ID_LENGTH = 16;
     private static final Random R = new Random();
+    private static boolean help = false;
 
     private JTextField nameTF;
     private JTextArea textArea;
@@ -69,6 +75,25 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
 
     public static void main(String[] args) {
         SimpleFakeTweetGeneratorUI theApp = new SimpleFakeTweetGeneratorUI();
+
+        // JCommander instance parses args, populates fields of theApp
+        JCommander argsParser = JCommander.newBuilder()
+            .addObject(theApp)
+            .programName("bin/simple-fake-tweet-generator-ui[.bat]")
+            .build();
+        try {
+            argsParser.parse(args);
+        } catch (ParameterException e) {
+            System.err.println("Unknown argument parameter:\n  " + e.getMessage());
+            help = true;
+        }
+
+        if (help) {
+            StringBuilder sb = new StringBuilder();
+            argsParser.usage(sb);
+            System.out.println(sb.toString());
+            System.exit(-1);
+        }
 
         loadProxyProperties();
 
@@ -237,7 +262,9 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
     private Map<String, Object> buildSimpleTweet() {
         Map<String, Object> tweet = Maps.newTreeMap();
         String id = generateID().toString();
-        tweet.put("created_at", TWITTER_TIMESTAMP_FORMAT.format(ZonedDateTime.now()));
+        if (! skipDate) {
+            tweet.put("created_at", TWITTER_TIMESTAMP_FORMAT.format(ZonedDateTime.now()));
+        }
         tweet.put("id", BigDecimal.valueOf(Double.parseDouble(id)));
         tweet.put("id_str", id);
         tweet.put("text", textArea.getText());
