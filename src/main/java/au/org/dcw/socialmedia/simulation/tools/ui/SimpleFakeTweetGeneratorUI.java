@@ -276,7 +276,7 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
             double[] latlon = geoPanel.getLatLon();
             Map<String, Object> coordinates = Maps.newTreeMap();
             coordinates.put("type", "Point");
-            coordinates.put("coordinates", latlon);
+            coordinates.put("coordinates", new double[]{latlon[1],latlon[0]}); // long,lat required
             tweet.put("coordinates", coordinates);
         }
         return tweet;
