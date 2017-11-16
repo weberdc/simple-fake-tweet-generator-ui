@@ -100,34 +100,6 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
         theApp.run();
     }
 
-    /**
-     * Loads proxy information from <code>"./proxy.properties"</code> if it is
-     * present. If a proxy host and username are specified by no password, the
-     * user is asked to type it in via stdin.
-     *
-     * @return A {@link Properties} map with proxy credentials.
-     */
-    private static Properties loadProxyProperties() {
-        final Properties properties = new Properties();
-        final String proxyFile = "./proxy.properties";
-        if (new File(proxyFile).exists()) {
-            boolean success = true;
-            try (Reader fileReader = Files.newBufferedReader(Paths.get(proxyFile))) {
-                properties.load(fileReader);
-            } catch (IOException e) {
-                System.err.println("Attempted and failed to load " + proxyFile + ": " + e.getMessage());
-                success = false;
-            }
-            if (success && !properties.containsKey("http.proxyPassword")) {
-                char[] password = System.console().readPassword("Please type in your proxy password: ");
-                properties.setProperty("http.proxyPassword", new String(password));
-                properties.setProperty("https.proxyPassword", new String(password));
-            }
-            properties.forEach((k, v) -> System.setProperty(k.toString(), v.toString()));
-        }
-        return properties;
-    }
-
     private void run() {
         // Create and set up the window
         JFrame frame = new JFrame("Create JSON for fake tweet");
@@ -311,5 +283,33 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
                 }
             });
         }
+    }
+
+    /**
+     * Loads proxy information from <code>"./proxy.properties"</code> if it is
+     * present. If a proxy host and username are specified by no password, the
+     * user is asked to type it in via stdin.
+     *
+     * @return A {@link Properties} map with proxy credentials.
+     */
+    private static Properties loadProxyProperties() {
+        final Properties properties = new Properties();
+        final String proxyFile = "./proxy.properties";
+        if (new File(proxyFile).exists()) {
+            boolean success = true;
+            try (Reader fileReader = Files.newBufferedReader(Paths.get(proxyFile))) {
+                properties.load(fileReader);
+            } catch (IOException e) {
+                System.err.println("Attempted and failed to load " + proxyFile + ": " + e.getMessage());
+                success = false;
+            }
+            if (success && !properties.containsKey("http.proxyPassword")) {
+                char[] password = System.console().readPassword("Please type in your proxy password: ");
+                properties.setProperty("http.proxyPassword", new String(password));
+                properties.setProperty("https.proxyPassword", new String(password));
+            }
+            properties.forEach((k, v) -> System.setProperty(k.toString(), v.toString()));
+        }
+        return properties;
     }
 }
