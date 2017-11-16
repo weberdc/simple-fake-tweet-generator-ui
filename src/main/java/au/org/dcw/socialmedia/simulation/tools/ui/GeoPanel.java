@@ -145,6 +145,7 @@ public class GeoPanel extends JPanel {
         gbc.gridx = 1;
         gbc.gridwidth = 4;
         gbc.weightx = 1.0;
+        gbc.weighty = 1.0;
         gbc.fill = GridBagConstraints.BOTH;
         gbc.insets = new Insets(0, 0, 5, 0);
         this.add(mapUI, gbc);

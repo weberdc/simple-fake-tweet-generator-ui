@@ -31,9 +31,13 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.WindowConstants;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -46,7 +50,6 @@ import java.io.Reader;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
@@ -109,46 +112,61 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
         frame.setContentPane(this);
 
         // Display the window
-        frame.pack();
+//        frame.pack();
+        frame.setSize(700, 500);
         frame.setVisible(true);
     }
 
     private void buildUI() {
 
         // STRUCTURE
-        setLayout(new GridBagLayout());
-        setBorder(BorderFactory.createEmptyBorder(5,5,5,5));
+        this.setLayout(new BorderLayout());
+        this.setBorder(BorderFactory.createEmptyBorder(5,5,5,5));
+
+        // set up left and right panels
+        final JPanel left = new JPanel(new GridBagLayout());
+        final JPanel right = new JPanel(new BorderLayout());
+
+        left.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 5));
+
+        final JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, right);
+        splitPane.setOneTouchExpandable(true);
+        splitPane.setDividerLocation(400);
+
+        this.add(splitPane, BorderLayout.CENTER);
+
+        // LEFT
 
         // Row 1: name
-        int row = 1;
+        int row = 0;
         final JLabel nameLabel = new JLabel("<html>Screen<br>Name:</html>");
 
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.gridy = row - 1;
+        gbc.gridy = row;
         gbc.gridx = 0;
         gbc.insets = new Insets(0, 0, 5, 5);
-        this.add(nameLabel, gbc);
+        left.add(nameLabel, gbc);
 
         nameTF = new JTextField(15);
         nameLabel.setLabelFor(nameTF);
 
         gbc = new GridBagConstraints();
-        gbc.gridy = row - 1;
+        gbc.gridy = row;
         gbc.gridx = 1;
         gbc.weightx = 1.0;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(0, 0, 5, 0);
-        this.add(nameTF, gbc);
+        left.add(nameTF, gbc);
 
         // Row 2: text field
-        row = 2;
+        row++;
         final JLabel textLabel = new JLabel("Text:");
 
         gbc = new GridBagConstraints();
-        gbc.gridy = row - 1;
+        gbc.gridy = row;
         gbc.gridx = 0;
         gbc.insets = new Insets(0, 0, 5, 5);
-        this.add(textLabel, gbc);
+        left.add(textLabel, gbc);
 
         textArea = new JTextArea(4, 30);
         textArea.setLineWrap(true);
@@ -158,48 +176,73 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 
         gbc = new GridBagConstraints();
-        gbc.gridy = row - 1;
+        gbc.gridy = row;
         gbc.gridx = 1;
         gbc.weightx = 1.0;
-        gbc.weighty = 1.0;
+        gbc.weighty = 0.25;
         gbc.insets = new Insets(0, 0, 5, 0);
         gbc.fill = GridBagConstraints.BOTH;
-        this.add(scrollPane, gbc);
+        left.add(scrollPane, gbc);
 
         // Row 3: use geo checkbox
-        row = 3;
+        row++;
         useGeoCheckbox = new JCheckBox("Use geo?");
         useGeoCheckbox.setSelected(true);
 
         gbc = new GridBagConstraints();
-        gbc.gridy = row - 1;
+        gbc.gridy = row;
         gbc.gridx = 0;
         gbc.gridwidth = 2;
         gbc.anchor = GridBagConstraints.WEST;
         gbc.insets = new Insets(0, 0, 5, 0);
-        this.add(useGeoCheckbox, gbc);
+        left.add(useGeoCheckbox, gbc);
 
         // Row 4: geo panel
-        row = 4;
+        row++;
         geoPanel = new GeoPanel();
+        geoPanel.setBorder(BorderFactory.createLineBorder(Color.GREEN));
 
         gbc = new GridBagConstraints();
-        gbc.gridy = row - 1;
+        gbc.gridy = row;
         gbc.gridwidth = 2;
         gbc.weightx = 1.0;
-        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weighty = 0.75;
+        gbc.fill = GridBagConstraints.BOTH;
         gbc.insets = new Insets(0, 0, 5, 0);
-        this.add(geoPanel, gbc);
+        left.add(geoPanel, gbc);
 
         // Row 5: generate button
-        row = 5;
+        row++;
         final JButton genButton = new JButton("Push JSON to global clipboard");
 
         gbc = new GridBagConstraints();
-        gbc.gridy = row - 1;
+        gbc.gridy = row;
         gbc.gridwidth = 2;
         gbc.fill = GridBagConstraints.HORIZONTAL;
-        this.add(genButton, gbc);
+        left.add(genButton, gbc);
+
+        // RIGHT
+
+        final JTextArea jsonTextArea = new JTextArea();
+        jsonTextArea.setLineWrap(true);
+        jsonTextArea.setWrapStyleWord(true);
+        jsonTextArea.setFont(new Font("Courier New", Font.PLAIN, 12));
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 250; i++) {
+            sb.append((char) (Math.floor(Math.random() * 26) + 'a'));
+            if (Math.random() > 0.9) sb.append(' ');
+        }
+        jsonTextArea.setText(sb.toString());
+
+        final JScrollPane jsonScrollPane = new JScrollPane(
+            jsonTextArea,
+            JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+            JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+        );
+
+        right.add(jsonScrollPane, BorderLayout.CENTER);
+
 
         // BEHAVIOUR
         useGeoCheckbox.addActionListener(e -> {
