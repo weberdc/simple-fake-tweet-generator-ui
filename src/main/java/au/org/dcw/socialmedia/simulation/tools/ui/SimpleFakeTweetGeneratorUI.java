@@ -21,6 +21,9 @@ import com.beust.jcommander.ParameterException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.collect.Maps;
 
 import javax.swing.BorderFactory;
@@ -35,6 +38,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 import java.awt.BorderLayout;
 import java.awt.Font;
@@ -67,16 +71,50 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
             return getNested(root, path);
         }
 
-        Object getNested(JsonNode obj, String path) {
+        Object getNested(final JsonNode obj, final String path) {
             if (path.contains(".")) {
                 final String head = path.substring(0, path.indexOf('.'));
+                final String tail = path.substring(path.indexOf('.') + 1);
                 if (obj.has(head)) {
-                    return getNested(obj.get(head), path.substring(path.indexOf('.') + 1));
+                    return getNested(obj.get(head), tail);
+                } else {
+                    System.err.println("Could not find sub-path: " + tail);
+                    return null; // error!
                 }
             } else {
                 return obj.get(path);
             }
-            return null; // error!
+        }
+
+        public void set(String path, Object value) {
+            setNested((ObjectNode) root, path, value);
+        }
+
+        void setNested(final ObjectNode obj, final String path, final Object value) {
+            if (path.contains(".")) {
+                final String head = path.substring(0, path.indexOf('.'));
+                final String tail = path.substring(path.indexOf('.') + 1);
+                if (obj.has(head)) {
+                    setNested((ObjectNode) obj.get(head), tail, value);
+                } else {
+                    System.err.println("Could not find sub-path: " + tail);
+                }
+            } else {
+                final JsonNodeFactory jsonNodeFactory = JsonNodeFactory.instance;
+                if (value == null) {
+                    obj.set(path, jsonNodeFactory.nullNode());
+                } else if (value instanceof JsonNode) {
+                    obj.set(path, (JsonNode) value);
+                } else if (value instanceof String) {
+                    obj.set(path, jsonNodeFactory.textNode(value.toString()));
+                } else if (value instanceof double[]) { //value.getClass().isArray()) {
+                    final ArrayNode arrayNode = jsonNodeFactory.arrayNode();
+                    double[] array = (double[]) value;
+                    arrayNode.add(array[0]);
+                    arrayNode.add(array[1]);
+                    obj.set(path, arrayNode);
+                }
+            }
         }
     }
 
@@ -95,6 +133,7 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
     private JTextArea textArea;
     private JCheckBox useGeoCheckbox;
     private GeoPanel geoPanel;
+    private JTextArea jsonTextArea;
 
     private TweetModel model = new TweetModel();
 
@@ -265,17 +304,19 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
 
         // RIGHT
 
-        final JTextArea jsonTextArea = new JTextArea();
+        jsonTextArea = new JTextArea();
         jsonTextArea.setLineWrap(true);
         jsonTextArea.setWrapStyleWord(true);
         jsonTextArea.setFont(new Font("Courier New", Font.PLAIN, 12));
 
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < 250; i++) {
-            sb.append((char) (Math.floor(Math.random() * 26) + 'a'));
-            if (Math.random() > 0.9) sb.append(' ');
-        }
-        jsonTextArea.setText(sb.toString());
+        // random 'words'
+//        StringBuilder sb = new StringBuilder();
+//        for (int i = 0; i < 250; i++) {
+//            sb.append((char) (Math.floor(Math.random() * 26) + 'a'));
+//            if (Math.random() > 0.9) sb.append(' ');
+//        }
+//        jsonTextArea.setText(sb.toString());
+        updateTextArea();
 
         final JScrollPane jsonScrollPane = new JScrollPane(
             jsonTextArea,
@@ -289,6 +330,15 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
         // BEHAVIOUR
         useGeoCheckbox.addActionListener(e -> {
             recursivelySetEnabled(geoPanel, useGeoCheckbox.isSelected());
+            if (! useGeoCheckbox.isSelected()) {
+                model.set("geo", null);
+                model.set("coordinates", null);
+            } else {
+                final double[] ll = geoPanel.getLatLon();
+                model.set("geo", makeLatLonJsonNode(ll[0], ll[1]));
+                model.set("coordinates", makeLatLonJsonNode(ll[1], ll[0]));
+            }
+            updateTextArea();
         });
         genButton.addActionListener(e -> {
             final Map<String, Object> tweet = buildSimpleTweet();
@@ -299,6 +349,27 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
             }
         });
 
+
+    }
+
+    private JsonNode makeLatLonJsonNode(double first, double second) {
+        try {
+            return JSON.readValue("{\"coordinates\":[" + first + "," + second + "],\"type\":\"Point\"}", JsonNode.class);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return JsonNodeFactory.instance.nullNode();
+        }
+    }
+
+    private void updateTextArea() {
+        SwingUtilities.invokeLater(() -> {
+            try {
+                jsonTextArea.setText(JSON.writeValueAsString(model.root));
+            } catch (JsonProcessingException e) {
+                System.err.println("Error generating JSON");
+                e.printStackTrace();
+            }
+        });
     }
 
     private double[] lookupLatLon() {
