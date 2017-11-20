@@ -31,31 +31,41 @@ import javax.swing.JFormattedTextField;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JRadioButton;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.event.MouseInputListener;
+import javax.swing.text.Document;
+import javax.swing.text.JTextComponent;
 import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import java.io.File;
+import java.util.Objects;
 import java.util.stream.Stream;
 
 public class GeoPanel extends JPanel {
+    public static final int DEFAULT_MAP_WIDTH = 500;
+    public static final int DEFAULT_MAP_HEIGHT = 250;
+
     private final JRadioButton geoFromGoogle;
     private final JRadioButton geoFromLatLong;
     private final JRadioButton geoFromMap;
     private final JFormattedTextField latLonTF, latTF, lonTF;
     private final JXMapViewer mapUI;
 
-    public GeoPanel() {
+    public GeoPanel(final double defaultLatitude, final double defaultLongitude) {
+
         this.setLayout(new GridBagLayout());
-
-        // Set the focus (default: Barr Smith Lawns, University of Adelaide, Adelaide, South Australia)
-        final double defaultLatitude = Double.parseDouble(System.getProperty("initial.latitude", "-34.918"));
-        final double defaultLongitude = Double.parseDouble(System.getProperty("initial.longitude", "138.604"));
-
 
         // Row 1: Paste from Google, i.e., lat,lon
         geoFromGoogle = new JRadioButton();
@@ -70,6 +80,7 @@ public class GeoPanel extends JPanel {
         latLonTF.setFocusLostBehavior(JFormattedTextField.COMMIT_OR_REVERT);
         latLonTF.setToolTipText("Paste coordinates from, e.g., Google, as latitude, longitude");
         latLonTF.setText(defaultLatitude + "," + defaultLongitude);
+        latLonTF.setEditable(true);
 
         gbc = new GridBagConstraints();
         gbc.gridx = 1;
@@ -165,7 +176,120 @@ public class GeoPanel extends JPanel {
         latLonTF.addMouseListener(new SelectAllText(latLonTF));
         latTF.addMouseListener(new SelectAllText(latTF));
         lonTF.addMouseListener(new SelectAllText(lonTF));
+
+        // coordinate changes between the fields
+        // latLonTF updates latTF, lonTF and mapUI
+        addChangeListener(latLonTF, e -> {
+            final String[] parts = latLonTF.getText().split(",");
+            if (parts.length > 1) {
+                boolean changed = false;
+                if (! latTF.getText().equals(parts[0])) {
+                    latTF.setText(parts[0]);
+                    changed = true;
+                }
+                if (! lonTF.getText().equals(parts[1])) {
+                    lonTF.setText(parts[1]);
+                    changed = true;
+                }
+                if (changed) {
+                    final double lat = Double.parseDouble(parts[0]);
+                    final double lon = Double.parseDouble(parts[1]);
+                    mapUI.setCenterPosition(new GeoPosition(lat, lon));
+                }
+            }
+        });
+        // latTF updates latLonTF and mapUI
+        addChangeListener(latTF, e -> {
+            final String lonStr = latLonTF.getText().substring(latLonTF.getText().indexOf(',') + 1);
+            final String newLatLon = latTF.getText() + "," + lonStr;
+            if (! latLonTF.getText().equals(newLatLon)) {
+                latLonTF.setText(newLatLon);
+                final double lat = Double.parseDouble(latTF.getText());
+                final GeoPosition centre = mapUI.getCenterPosition();
+                mapUI.setCenterPosition(new GeoPosition(lat, centre.getLongitude()));
+            }
+        });
+        // lonTF updates latLonTF and mapUI
+        addChangeListener(lonTF, e -> {
+            final String latStr = latLonTF.getText().substring(0, latLonTF.getText().indexOf(','));
+            final String newValue = latStr + "," + lonTF.getText();
+            if (! latLonTF.getText().equals(newValue)) {
+                latLonTF.setText(newValue);
+                final double lon = Double.parseDouble(lonTF.getText());
+                final GeoPosition centre = mapUI.getCenterPosition();
+                mapUI.setCenterPosition(new GeoPosition(centre.getLatitude(), lon));
+            }
+        });
+        // mapUI updates only latLonTF and relies on other handlers above to update latTF and lonTF
+        mapUI.addPropertyChangeListener("centerPosition", evt -> {
+            final GeoPosition centre = mapUI.getCenterPosition();
+            final double lat = centre.getLatitude();
+            final double lon = centre.getLongitude();
+            if (latLonTF.getText().indexOf(',') == -1) {
+                latLonTF.setText(lat + "," + lon);
+            } else {
+                final String[] parts = latLonTF.getText().split(",");
+                if (Math.abs(Double.parseDouble(parts[0]) - lat) > 0.00001 ||
+                    Math.abs(Double.parseDouble(parts[1]) - lon) > 0.00001) {
+                    latLonTF.setText(lat + "," + lon);
+                }
+            }
+        });
     }
+
+    /**
+     * Installs a listener to receive notification when the text of any
+     * {@code JTextComponent} is changed. Internally, it installs a
+     * {@link DocumentListener} on the text component's {@link Document},
+     * and a {@link PropertyChangeListener} on the text component to detect
+     * if the {@code Document} itself is replaced.
+     *
+     * @param text any text component, such as a {@link JTextField}
+     *        or {@link JTextArea}
+     * @param changeListener a listener to receieve {@link ChangeEvent}s
+     *        when the text is changed; the source object for the events
+     *        will be the text component
+     * @throws NullPointerException if either parameter is null
+     * @see <a href="https://stackoverflow.com/a/27190162">java - Value Change Listener to JTextField - Stack Overflow</a>
+     */
+    public static void addChangeListener(final JTextComponent text, final ChangeListener changeListener) {
+        Objects.requireNonNull(text);
+        Objects.requireNonNull(changeListener);
+        DocumentListener dl = new DocumentListener() {
+            private int lastChange = 0, lastNotifiedChange = 0;
+
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                changedUpdate(e);
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                changedUpdate(e);
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                lastChange++;
+                SwingUtilities.invokeLater(() -> {
+                    if (lastNotifiedChange != lastChange) {
+                        lastNotifiedChange = lastChange;
+                        changeListener.stateChanged(new ChangeEvent(text));
+                    }
+                });
+            }
+        };
+        text.addPropertyChangeListener("document", (PropertyChangeEvent e) -> {
+            Document d1 = (Document) e.getOldValue();
+            Document d2 = (Document) e.getNewValue();
+            if (d1 != null) d1.removeDocumentListener(dl);
+            if (d2 != null) d2.addDocumentListener(dl);
+            dl.changedUpdate(null);
+        });
+        Document d = text.getDocument();
+        if (d != null) d.addDocumentListener(dl);
+    }
+
 
     private JXMapViewer createMapUI(final double latitude, final double longitude) {
         final JXMapViewer mapViewer = new JXMapViewer();
@@ -202,18 +326,9 @@ public class GeoPanel extends JPanel {
         mapViewer.addMouseMotionListener(sa);
         mapViewer.setOverlayPainter(sp);
 
-//        mapViewer.addPropertyChangeListener("zoom", evt -> {
-//            System.out.println("Zoom level: " + evt.getNewValue());
-//        });
-//
-//        mapViewer.addPropertyChangeListener("center", evt -> {
-//            double lat = mapViewer.getCenterPosition().getLatitude();
-//            double lon = mapViewer.getCenterPosition().getLongitude();
-//        });
-
         mapViewer.setZoom(7);
         mapViewer.setAddressLocation(initialLocation);
-        mapViewer.setPreferredSize(new Dimension(500,250));
+        mapViewer.setPreferredSize(new Dimension(DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT));
 
         return mapViewer;
     }

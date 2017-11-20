@@ -19,6 +19,7 @@ import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Maps;
 
@@ -36,7 +37,6 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.WindowConstants;
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -60,11 +60,31 @@ import java.util.stream.IntStream;
 
 public class SimpleFakeTweetGeneratorUI extends JPanel {
 
-    public static final DateTimeFormatter TWITTER_TIMESTAMP_FORMAT =
+    class TweetModel {
+        JsonNode root;
+
+        Object get(final String path) {
+            return getNested(root, path);
+        }
+
+        Object getNested(JsonNode obj, String path) {
+            if (path.contains(".")) {
+                final String head = path.substring(0, path.indexOf('.'));
+                if (obj.has(head)) {
+                    return getNested(obj.get(head), path.substring(path.indexOf('.') + 1));
+                }
+            } else {
+                return obj.get(path);
+            }
+            return null; // error!
+        }
+    }
+
+    private static final DateTimeFormatter TWITTER_TIMESTAMP_FORMAT =
         DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss ZZZ yyyy", Locale.ENGLISH);
 
     @Parameter(names = {"--skip-date"}, description = "Don't bother creating a 'created_at' field.")
-    private static boolean skipDate = false;
+    private boolean skipDate = false;
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final int ID_LENGTH = 16;
@@ -76,7 +96,9 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
     private JCheckBox useGeoCheckbox;
     private GeoPanel geoPanel;
 
-    public static void main(String[] args) {
+    private TweetModel model = new TweetModel();
+
+    public static void main(String[] args) throws IOException {
         SimpleFakeTweetGeneratorUI theApp = new SimpleFakeTweetGeneratorUI();
 
         // JCommander instance parses args, populates fields of theApp
@@ -103,9 +125,22 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
         theApp.run();
     }
 
+    SimpleFakeTweetGeneratorUI() throws IOException {
+        initModel();
+    }
+
+    private void initModel() throws IOException {
+        final String initJSON = "{\"coordinates\":{\"coordinates\":[138.604,-34.918],\"type\":\"Point\"}," +
+            "\"created_at\":\"Fri Nov 17 10:06:17 +1030 2017\",\"full_text\":\"\"," +
+            "\"id\":1510875377905183,\"id_str\":\"1510875377905183\",\"text\":\"\"," +
+            "\"user\":{\"screen_name\":\"\"}}";
+
+        model.root = JSON.readValue(initJSON, JsonNode.class);
+    }
+
     private void run() {
         // Create and set up the window
-        JFrame frame = new JFrame("Create JSON for fake tweet");
+        JFrame frame = new JFrame("Tweet Editor");
         frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
 
         buildUI();
@@ -149,6 +184,8 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
 
         nameTF = new JTextField(15);
         nameLabel.setLabelFor(nameTF);
+        final Object screenName = model.get("user.screen_name");
+        nameTF.setText(screenName != null ? screenName.toString() : "");
 
         gbc = new GridBagConstraints();
         gbc.gridy = row;
@@ -171,6 +208,11 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
         textArea = new JTextArea(4, 30);
         textArea.setLineWrap(true);
         textArea.setWrapStyleWord(true);
+        Object text = model.get("text");
+        if (text == null || text.toString().length() == 0) {
+            text = model.get("full_text");
+        }
+        textArea.setText(text != null ? text.toString() : "");
 
         final JScrollPane scrollPane = new JScrollPane(textArea);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
@@ -187,7 +229,7 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
         // Row 3: use geo checkbox
         row++;
         useGeoCheckbox = new JCheckBox("Use geo?");
-        useGeoCheckbox.setSelected(true);
+        useGeoCheckbox.setSelected(model.get("coordinates") != null);
 
         gbc = new GridBagConstraints();
         gbc.gridy = row;
@@ -199,8 +241,8 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
 
         // Row 4: geo panel
         row++;
-        geoPanel = new GeoPanel();
-        geoPanel.setBorder(BorderFactory.createLineBorder(Color.GREEN));
+        double[] latLon = lookupLatLon();
+        geoPanel = new GeoPanel(latLon[0], latLon[1]);
 
         gbc = new GridBagConstraints();
         gbc.gridy = row;
@@ -259,6 +301,23 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
 
     }
 
+    private double[] lookupLatLon() {
+        if (model.get("coordinates") == null) {
+            // Set the focus (default: Barr Smith Lawns, University of Adelaide, Adelaide, South Australia)
+            final double defaultLatitude =
+                Double.parseDouble(System.getProperty("initial.latitude", "-34.918"));
+            final double defaultLongitude =
+                Double.parseDouble(System.getProperty("initial.longitude", "138.604"));
+
+            return new double[]{ defaultLatitude, defaultLongitude };
+        }
+
+        final double lat = ((JsonNode) model.get("coordinates.coordinates")).get(1).asDouble();
+        final double lon = ((JsonNode) model.get("coordinates.coordinates")).get(0).asDouble();
+
+        return new double[]{ lat, lon };
+    }
+
     private String generateJSON(final Map<String, Object> tweet) {
         try {
             return JSON.writeValueAsString(tweet);
@@ -311,12 +370,12 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
     }
 
 
-    private void pushToClipboard(String s) {
+    private void pushToClipboard(final String s) {
         Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
         clipboard.setContents(new StringSelection(s), null);
     }
 
-    private void recursivelySetEnabled(JComponent component, boolean enabled) {
+    private void recursivelySetEnabled(final JComponent component, final boolean enabled) {
         component.setEnabled(enabled);
         final int numChildren = component.getComponentCount();
         if (numChildren > 0) {
