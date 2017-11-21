@@ -25,6 +25,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.collect.Maps;
+import org.jxmapviewer.viewer.GeoPosition;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -40,14 +41,21 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
+import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Toolkit;
 import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.UnsupportedFlavorException;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
@@ -58,20 +66,22 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Observable;
+import java.util.Observer;
 import java.util.Properties;
 import java.util.Random;
 import java.util.stream.IntStream;
 
-public class SimpleFakeTweetGeneratorUI extends JPanel {
+public class SimpleTweetEditorUI extends JPanel {
 
     class TweetModel {
         JsonNode root;
 
-        Object get(final String path) {
+        JsonNode get(final String path) {
             return getNested(root, path);
         }
 
-        Object getNested(final JsonNode obj, final String path) {
+        JsonNode getNested(final JsonNode obj, final String path) {
             if (path.contains(".")) {
                 final String head = path.substring(0, path.indexOf('.'));
                 final String tail = path.substring(path.indexOf('.') + 1);
@@ -79,10 +89,10 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
                     return getNested(obj.get(head), tail);
                 } else {
                     System.err.println("Could not find sub-path: " + tail);
-                    return null; // error!
+                    return JsonNodeFactory.instance.nullNode(); // error!
                 }
             } else {
-                return obj.get(path);
+                return obj.has(path) ? obj.get(path) : JsonNodeFactory.instance.nullNode();
             }
         }
 
@@ -137,8 +147,10 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
 
     private TweetModel model = new TweetModel();
 
+    // MAIN
+
     public static void main(String[] args) throws IOException {
-        SimpleFakeTweetGeneratorUI theApp = new SimpleFakeTweetGeneratorUI();
+        SimpleTweetEditorUI theApp = new SimpleTweetEditorUI();
 
         // JCommander instance parses args, populates fields of theApp
         JCommander argsParser = JCommander.newBuilder()
@@ -164,7 +176,7 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
         theApp.run();
     }
 
-    SimpleFakeTweetGeneratorUI() throws IOException {
+    SimpleTweetEditorUI() throws IOException {
         initModel();
     }
 
@@ -255,12 +267,13 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
 
         final JScrollPane scrollPane = new JScrollPane(textArea);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setMinimumSize(new Dimension(150, 75));
 
         gbc = new GridBagConstraints();
         gbc.gridy = row;
         gbc.gridx = 1;
         gbc.weightx = 1.0;
-        gbc.weighty = 0.25;
+        gbc.weighty = 0.0;
         gbc.insets = new Insets(0, 0, 5, 0);
         gbc.fill = GridBagConstraints.BOTH;
         left.add(scrollPane, gbc);
@@ -287,7 +300,7 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
         gbc.gridy = row;
         gbc.gridwidth = 2;
         gbc.weightx = 1.0;
-        gbc.weighty = 0.75;
+        gbc.weighty = 1.;
         gbc.fill = GridBagConstraints.BOTH;
         gbc.insets = new Insets(0, 0, 5, 0);
         left.add(geoPanel, gbc);
@@ -309,13 +322,6 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
         jsonTextArea.setWrapStyleWord(true);
         jsonTextArea.setFont(new Font("Courier New", Font.PLAIN, 12));
 
-        // random 'words'
-//        StringBuilder sb = new StringBuilder();
-//        for (int i = 0; i < 250; i++) {
-//            sb.append((char) (Math.floor(Math.random() * 26) + 'a'));
-//            if (Math.random() > 0.9) sb.append(' ');
-//        }
-//        jsonTextArea.setText(sb.toString());
         updateTextArea();
 
         final JScrollPane jsonScrollPane = new JScrollPane(
@@ -325,6 +331,10 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
         );
 
         right.add(jsonScrollPane, BorderLayout.CENTER);
+
+        final JButton pasteFromClipboardButton = new JButton("Paste from clipboard");
+
+        right.add(pasteFromClipboardButton, BorderLayout.SOUTH);
 
 
         // BEHAVIOUR
@@ -340,21 +350,82 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
             }
             updateTextArea();
         });
+        nameTF.addKeyListener(newUpdateOnChangeListener(nameTF,"user.screen_name"));
+        textArea.addKeyListener(newUpdateOnChangeListener(textArea,"text"));
+        textArea.addKeyListener(newUpdateOnChangeListener(textArea,"full_text"));
+        geoPanel.addObserver(e -> {
+            if (useGeoCheckbox.isSelected()) {
+                GeoPosition centre = (GeoPosition) e.getNewValue();
+                model.set("geo", makeLatLonJsonNode(centre.getLatitude(), centre.getLongitude()));
+                model.set("coordinates", makeLatLonJsonNode(centre.getLongitude(), centre.getLatitude()));
+                updateTextArea();
+            }
+        });
+        // paste from clipboard to the full json text area
+        pasteFromClipboardButton.addActionListener(e -> {
+            final String originalContent = jsonTextArea.getText();
+            final Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+            try {
+                // grab the text from the clipboard, safely
+                final String hopefullyJSON = (String) clipboard.getData(DataFlavor.stringFlavor);
+                model.root = JSON.readValue(hopefullyJSON, JsonNode.class); // try it out
+                if (hopefullyJSON != null) {
+                    // update the text areas
+                    jsonTextArea.setText(hopefullyJSON);
+                    nameTF.setText(model.get("user.screen_name").asText(""));
+                    textArea.setText(model.get("text").asText(""));
+                    if (textArea.getText().equals("")) {
+                        textArea.setText(model.get("full_text").asText(""));
+                    }
+                    final String coords = model.get("coordinates.coordinates") == null
+                        ? ""
+                        : model.get("coordinates.coordinates").asText();
+                    if (coords.equals("null") || coords.length() < 2) { // no value
+                        final double[] defaultLatLon = getDefaultLatLon();
+                        geoPanel.setCentre(defaultLatLon[0], defaultLatLon[1]);
+                    } else {
+                        final String[] parts = coords.split(",");
+                        geoPanel.setCentre(Double.parseDouble(parts[1]), Double.parseDouble(parts[0]));
+                    }
+
+                }
+            } catch (UnsupportedFlavorException | IOException e1) {
+                jsonTextArea.setText(originalContent);
+                e1.printStackTrace();
+                JOptionPane.showMessageDialog(
+                    jsonTextArea,
+                    "Failed to paste:\n" + e1.getMessage(),
+                    "Paste Error",
+                    JOptionPane.WARNING_MESSAGE
+                );
+            }
+        });
+
         genButton.addActionListener(e -> {
             final Map<String, Object> tweet = buildSimpleTweet();
             final String json = generateJSON(tweet);
             if (json != null) {
                 pushToClipboard(json);
                 System.out.println(json);
+
             }
         });
+    }
 
-
+    private KeyListener newUpdateOnChangeListener(final JTextComponent tc, final String propertyPath) {
+        return new KeyAdapter() {
+            @Override
+            public void keyTyped(KeyEvent e) {
+                model.set(propertyPath, tc.getText());
+                updateTextArea();
+            }
+        };
     }
 
     private JsonNode makeLatLonJsonNode(double first, double second) {
         try {
-            return JSON.readValue("{\"coordinates\":[" + first + "," + second + "],\"type\":\"Point\"}", JsonNode.class);
+            final String jsonContent = "{\"coordinates\":[" + first + "," + second + "],\"type\":\"Point\"}";
+            return JSON.readValue(jsonContent, JsonNode.class);
         } catch (IOException e) {
             e.printStackTrace();
             return JsonNodeFactory.instance.nullNode();
@@ -374,13 +445,7 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
 
     private double[] lookupLatLon() {
         if (model.get("coordinates") == null) {
-            // Set the focus (default: Barr Smith Lawns, University of Adelaide, Adelaide, South Australia)
-            final double defaultLatitude =
-                Double.parseDouble(System.getProperty("initial.latitude", "-34.918"));
-            final double defaultLongitude =
-                Double.parseDouble(System.getProperty("initial.longitude", "138.604"));
-
-            return new double[]{ defaultLatitude, defaultLongitude };
+            return getDefaultLatLon();
         }
 
         final double lat = ((JsonNode) model.get("coordinates.coordinates")).get(1).asDouble();
@@ -389,12 +454,22 @@ public class SimpleFakeTweetGeneratorUI extends JPanel {
         return new double[]{ lat, lon };
     }
 
+    private double[] getDefaultLatLon() {
+        // Set the focus (default: Barr Smith Lawns, University of Adelaide, Adelaide, South Australia)
+        final double defaultLatitude =
+            Double.parseDouble(System.getProperty("initial.latitude", "-34.918"));
+        final double defaultLongitude =
+            Double.parseDouble(System.getProperty("initial.longitude", "138.604"));
+
+        return new double[]{ defaultLatitude, defaultLongitude };
+    }
+
     private String generateJSON(final Map<String, Object> tweet) {
         try {
             return JSON.writeValueAsString(tweet);
         } catch (JsonProcessingException e1) {
             JOptionPane.showMessageDialog(
-                SimpleFakeTweetGeneratorUI.this,
+                SimpleTweetEditorUI.this,
                 "Error creating JSON:\n" + e1.getMessage(),
                 "Error",
                 JOptionPane.WARNING_MESSAGE

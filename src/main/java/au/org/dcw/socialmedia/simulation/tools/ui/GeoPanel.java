@@ -49,8 +49,10 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
+import java.beans.PropertyChangeSupport;
 import java.io.File;
 import java.util.Objects;
+import java.util.Observer;
 import java.util.stream.Stream;
 
 public class GeoPanel extends JPanel {
@@ -62,6 +64,12 @@ public class GeoPanel extends JPanel {
     private final JRadioButton geoFromMap;
     private final JFormattedTextField latLonTF, latTF, lonTF;
     private final JXMapViewer mapUI;
+
+    private final PropertyChangeSupport observable = new PropertyChangeSupport(this);
+
+    public void fireUpdate(GeoPosition newCentre) {
+        observable.firePropertyChange("centre", null, newCentre);
+    }
 
     public GeoPanel(final double defaultLatitude, final double defaultLongitude) {
 
@@ -207,6 +215,7 @@ public class GeoPanel extends JPanel {
                 final double lat = Double.parseDouble(latTF.getText());
                 final GeoPosition centre = mapUI.getCenterPosition();
                 mapUI.setCenterPosition(new GeoPosition(lat, centre.getLongitude()));
+                fireUpdate(mapUI.getCenterPosition());
             }
         });
         // lonTF updates latLonTF and mapUI
@@ -218,6 +227,7 @@ public class GeoPanel extends JPanel {
                 final double lon = Double.parseDouble(lonTF.getText());
                 final GeoPosition centre = mapUI.getCenterPosition();
                 mapUI.setCenterPosition(new GeoPosition(centre.getLatitude(), lon));
+                fireUpdate(mapUI.getCenterPosition());
             }
         });
         // mapUI updates only latLonTF and relies on other handlers above to update latTF and lonTF
@@ -227,11 +237,13 @@ public class GeoPanel extends JPanel {
             final double lon = centre.getLongitude();
             if (latLonTF.getText().indexOf(',') == -1) {
                 latLonTF.setText(lat + "," + lon);
+                fireUpdate(mapUI.getCenterPosition());
             } else {
                 final String[] parts = latLonTF.getText().split(",");
                 if (Math.abs(Double.parseDouble(parts[0]) - lat) > 0.00001 ||
                     Math.abs(Double.parseDouble(parts[1]) - lon) > 0.00001) {
                     latLonTF.setText(lat + "," + lon);
+                    fireUpdate(mapUI.getCenterPosition());
                 }
             }
         });
@@ -333,6 +345,10 @@ public class GeoPanel extends JPanel {
         return mapViewer;
     }
 
+    public void setCentre(double latitude, double longitude) {
+        latLonTF.setText(latitude + "," + longitude); // this should update the other fields
+    }
+
     class Clicker extends MouseAdapter {
         private final Runnable runnable;
 
@@ -381,5 +397,9 @@ public class GeoPanel extends JPanel {
 
         }
         return new double[]{-1.0,-1.0};
+    }
+
+    public void addObserver(PropertyChangeListener l) {
+        observable.addPropertyChangeListener(l);
     }
 }
