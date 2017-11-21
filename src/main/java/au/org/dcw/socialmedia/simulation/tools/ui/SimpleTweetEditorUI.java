@@ -24,7 +24,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.google.common.collect.Maps;
 import org.jxmapviewer.viewer.GeoPosition;
 
 import javax.swing.BorderFactory;
@@ -65,9 +64,6 @@ import java.nio.file.Paths;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Observable;
-import java.util.Observer;
 import java.util.Properties;
 import java.util.Random;
 import java.util.stream.IntStream;
@@ -126,6 +122,19 @@ public class SimpleTweetEditorUI extends JPanel {
                 }
             }
         }
+
+        public boolean has(final String path) {
+            return has(root, path);
+        }
+
+        public boolean has(final JsonNode obj, final String path) {
+            if (path.contains(".")) {
+                final String head = path.substring(0, path.indexOf('.'));
+                final String tail = path.substring(path.indexOf('.') + 1);
+                return obj.has(head) && has(obj.get(head), tail);
+            }
+            return obj.has(path);
+        }
     }
 
     private static final DateTimeFormatter TWITTER_TIMESTAMP_FORMAT =
@@ -177,16 +186,15 @@ public class SimpleTweetEditorUI extends JPanel {
     }
 
     SimpleTweetEditorUI() throws IOException {
-        initModel();
+        model.root = JSON.readValue(freshTweetJson(), JsonNode.class); // initialise the model
     }
 
-    private void initModel() throws IOException {
-        final String initJSON = "{\"coordinates\":{\"coordinates\":[138.604,-34.918],\"type\":\"Point\"}," +
-            "\"created_at\":\"Fri Nov 17 10:06:17 +1030 2017\",\"full_text\":\"\"," +
-            "\"id\":1510875377905183,\"id_str\":\"1510875377905183\",\"text\":\"\"," +
-            "\"user\":{\"screen_name\":\"\"}}";
-
-        model.root = JSON.readValue(initJSON, JsonNode.class);
+    private String freshTweetJson() {
+        final String id = generateID();
+        final String createdAt = TWITTER_TIMESTAMP_FORMAT.format(ZonedDateTime.now());
+        return "{\"coordinates\":{\"coordinates\":[138.604,-34.918],\"type\":\"Point\"}," +
+            "\"created_at\":\""+ createdAt + "\",\"full_text\":\"\",\"id\":" + id +
+            ",\"id_str\":\"" + id + "\",\"text\":\"\",\"user\":{\"screen_name\":\"\"}}";
     }
 
     private void run() {
@@ -315,6 +323,16 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         left.add(genButton, gbc);
 
+        // Row 6: new tweet button
+        row++;
+        final JButton newButton = new JButton("New tweet");
+
+        gbc = new GridBagConstraints();
+        gbc.gridy = row;
+        gbc.gridwidth = 2;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        left.add(newButton, gbc);
+
         // RIGHT
 
         jsonTextArea = new JTextArea();
@@ -368,27 +386,7 @@ public class SimpleTweetEditorUI extends JPanel {
             try {
                 // grab the text from the clipboard, safely
                 final String hopefullyJSON = (String) clipboard.getData(DataFlavor.stringFlavor);
-                model.root = JSON.readValue(hopefullyJSON, JsonNode.class); // try it out
-                if (hopefullyJSON != null) {
-                    // update the text areas
-                    jsonTextArea.setText(hopefullyJSON);
-                    nameTF.setText(model.get("user.screen_name").asText(""));
-                    textArea.setText(model.get("text").asText(""));
-                    if (textArea.getText().equals("")) {
-                        textArea.setText(model.get("full_text").asText(""));
-                    }
-                    final String coords = model.get("coordinates.coordinates") == null
-                        ? ""
-                        : model.get("coordinates.coordinates").asText();
-                    if (coords.equals("null") || coords.length() < 2) { // no value
-                        final double[] defaultLatLon = getDefaultLatLon();
-                        geoPanel.setCentre(defaultLatLon[0], defaultLatLon[1]);
-                    } else {
-                        final String[] parts = coords.split(",");
-                        geoPanel.setCentre(Double.parseDouble(parts[1]), Double.parseDouble(parts[0]));
-                    }
-
-                }
+                updateUIFromModel(hopefullyJSON);
             } catch (UnsupportedFlavorException | IOException e1) {
                 jsonTextArea.setText(originalContent);
                 e1.printStackTrace();
@@ -400,16 +398,53 @@ public class SimpleTweetEditorUI extends JPanel {
                 );
             }
         });
-
         genButton.addActionListener(e -> {
-            final Map<String, Object> tweet = buildSimpleTweet();
-            final String json = generateJSON(tweet);
+            final String json = generateJsonFromModel();
             if (json != null) {
                 pushToClipboard(json);
                 System.out.println(json);
 
             }
         });
+        newButton.addActionListener(e -> {
+            try {
+                updateUIFromModel(freshTweetJson());
+            } catch (IOException e1) {
+                e1.printStackTrace();
+                JOptionPane.showMessageDialog(
+                    jsonTextArea,
+                    "Failed to create new tweet:\n" + e1.getMessage(),
+                    "New Tweet Error",
+                    JOptionPane.WARNING_MESSAGE
+                );
+            }
+        });
+    }
+
+    private void updateUIFromModel(String hopefullyJSON) throws IOException {
+        model.root = JSON.readValue(hopefullyJSON, JsonNode.class); // try it out
+        if (hopefullyJSON != null) {
+            // update the text areas
+            jsonTextArea.setText(hopefullyJSON);
+            nameTF.setText(model.get("user.screen_name").asText(""));
+            textArea.setText(model.get("text").asText(""));
+            if (textArea.getText().equals("")) {
+                textArea.setText(model.get("full_text").asText(""));
+            }
+            final String coords = model.get("coordinates.coordinates") == null
+                ? ""
+                : model.get("coordinates.coordinates").asText();
+            if (coords.equals("null") || coords.length() < 2) { // no value
+                final double[] defaultLatLon = getDefaultLatLon();
+                geoPanel.setCentre(defaultLatLon[0], defaultLatLon[1]);
+                useGeoCheckbox.setSelected(false); // disable if info not present
+            } else {
+                final String[] parts = coords.split(",");
+                geoPanel.setCentre(Double.parseDouble(parts[1]), Double.parseDouble(parts[0]));
+                useGeoCheckbox.setSelected(true); // enable if info present
+            }
+            recursivelySetEnabled(geoPanel, useGeoCheckbox.isSelected());
+        }
     }
 
     private KeyListener newUpdateOnChangeListener(final JTextComponent tc, final String propertyPath) {
@@ -448,8 +483,8 @@ public class SimpleTweetEditorUI extends JPanel {
             return getDefaultLatLon();
         }
 
-        final double lat = ((JsonNode) model.get("coordinates.coordinates")).get(1).asDouble();
-        final double lon = ((JsonNode) model.get("coordinates.coordinates")).get(0).asDouble();
+        final double lat = model.get("coordinates.coordinates").get(1).asDouble();
+        final double lon = model.get("coordinates.coordinates").get(0).asDouble();
 
         return new double[]{ lat, lon };
     }
@@ -464,9 +499,18 @@ public class SimpleTweetEditorUI extends JPanel {
         return new double[]{ defaultLatitude, defaultLongitude };
     }
 
-    private String generateJSON(final Map<String, Object> tweet) {
+    private String generateJsonFromModel() {
         try {
-            return JSON.writeValueAsString(tweet);
+            if (! model.has("created_at")) {
+                model.set("created_at", TWITTER_TIMESTAMP_FORMAT.format(ZonedDateTime.now()));
+            }
+            if (! model.has("id")) {
+                final String id = generateID();
+                model.set("id", BigDecimal.valueOf(Double.parseDouble(id)));
+                model.set("id_str", id);
+            }
+
+            return JSON.writeValueAsString(model.root);
         } catch (JsonProcessingException e1) {
             JOptionPane.showMessageDialog(
                 SimpleTweetEditorUI.this,
@@ -479,40 +523,17 @@ public class SimpleTweetEditorUI extends JPanel {
         return null;
     }
 
-    private Map<String, Object> buildSimpleTweet() {
-        Map<String, Object> tweet = Maps.newTreeMap();
-        String id = generateID().toString();
-        if (! skipDate) {
-            tweet.put("created_at", TWITTER_TIMESTAMP_FORMAT.format(ZonedDateTime.now()));
-        }
-        tweet.put("id", BigDecimal.valueOf(Double.parseDouble(id)));
-        tweet.put("id_str", id);
-        tweet.put("text", textArea.getText());
-        tweet.put("full_text", textArea.getText());
-        Map<String, Object> user = Maps.newTreeMap();
-        user.put("screen_name", nameTF.getText());
-        tweet.put("user", user);
-        if (useGeoCheckbox.isSelected()) {
-            double[] latlon = geoPanel.getLatLon();
-            Map<String, Object> coordinates = Maps.newTreeMap();
-            coordinates.put("type", "Point");
-            coordinates.put("coordinates", new double[]{latlon[1],latlon[0]}); // long,lat required
-            tweet.put("coordinates", coordinates);
-        }
-        return tweet;
-    }
-
     /**
      * Creates a plausible tweet ID.
      *
      * @return A plausible tweet ID.
      */
-    private static Long generateID() {
-        StringBuilder idStr = new StringBuilder(Long.toString(System.currentTimeMillis()));
+    private static String generateID() {
+        final StringBuilder idStr = new StringBuilder(Long.toString(System.currentTimeMillis()));
         while (idStr.length() < ID_LENGTH) {
             idStr.append(R.nextInt(10)); // 0-9
         }
-        return Long.valueOf(idStr.toString());
+        return idStr.toString();
     }
 
 
