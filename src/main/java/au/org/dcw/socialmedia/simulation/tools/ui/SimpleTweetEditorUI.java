@@ -153,6 +153,9 @@ public class SimpleTweetEditorUI extends JPanel {
     private JCheckBox useGeoCheckbox;
     private GeoPanel geoPanel;
     private JTextArea jsonTextArea;
+    private JTextField idTF;
+    private JTextField tsTF;
+
 
     private TweetModel model = new TweetModel();
 
@@ -191,7 +194,7 @@ public class SimpleTweetEditorUI extends JPanel {
 
     private String freshTweetJson() {
         final String id = generateID();
-        final String createdAt = TWITTER_TIMESTAMP_FORMAT.format(ZonedDateTime.now());
+        final String createdAt = now();
         return "{\"coordinates\":{\"coordinates\":[138.604,-34.918],\"type\":\"Point\"}," +
             "\"created_at\":\""+ createdAt + "\",\"full_text\":\"\",\"id\":" + id +
             ",\"id_str\":\"" + id + "\",\"text\":\"\",\"user\":{\"screen_name\":\"\"}}";
@@ -209,7 +212,7 @@ public class SimpleTweetEditorUI extends JPanel {
 
         // Display the window
 //        frame.pack();
-        frame.setSize(700, 500);
+        frame.setSize(700, 600);
         System.out.println("Size set");
         frame.setVisible(true);
 
@@ -238,16 +241,16 @@ public class SimpleTweetEditorUI extends JPanel {
 
         // Row 1: name
         int row = 0;
-        final JLabel nameLabel = new JLabel("<html>Screen<br>Name:</html>");
+        final JLabel nameButton = new JLabel("Screen Name:");
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridy = row;
         gbc.gridx = 0;
         gbc.insets = new Insets(0, 0, 5, 5);
-        left.add(nameLabel, gbc);
+        left.add(nameButton, gbc);
 
         nameTF = new JTextField(15);
-        nameLabel.setLabelFor(nameTF);
+        nameButton.setLabelFor(nameTF);
         final Object screenName = model.get("user.screen_name");
         nameTF.setText(screenName != null ? screenName.toString() : "");
 
@@ -303,7 +306,8 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.insets = new Insets(0, 0, 5, 5);
         left.add(idButton, gbc);
 
-        final JTextField idTF = new JTextField();
+        idTF = new JTextField();
+        idTF.setText(model.get("id_str").asText(""));
 
         gbc = new GridBagConstraints();
         gbc.gridy = row;
@@ -324,7 +328,8 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.insets = new Insets(0, 0, 5, 5);
         left.add(tsButton, gbc);
 
-        final JTextField tsTF = new JTextField();
+        tsTF = new JTextField();
+        tsTF.setText(model.get("created_at").asText(now()));
 
         gbc = new GridBagConstraints();
         gbc.gridy = row;
@@ -420,6 +425,23 @@ public class SimpleTweetEditorUI extends JPanel {
         nameTF.addKeyListener(newUpdateOnChangeListener(nameTF,"user.screen_name"));
         textArea.addKeyListener(newUpdateOnChangeListener(textArea,"text"));
         textArea.addKeyListener(newUpdateOnChangeListener(textArea,"full_text"));
+        idButton.addActionListener(e -> {
+            if (JOptionPane.showConfirmDialog(
+                SimpleTweetEditorUI.this,
+                "Are you sure you want to replace the ID?",
+                "Regenerate ID",
+                JOptionPane.YES_NO_OPTION) == 0) {
+                final String newID = generateID();
+                model.set("id_str", newID);
+                model.set("id", BigDecimal.valueOf(Long.parseLong(newID)));
+                idTF.setText(newID);
+            }
+        });
+        tsButton.addActionListener(e -> {
+            String now = now();
+            model.set("created_at", now);
+            tsTF.setText(now);
+        });
         geoPanel.addObserver(e -> {
             if (useGeoCheckbox.isSelected()) {
                 GeoPosition centre = (GeoPosition) e.getNewValue();
@@ -480,6 +502,8 @@ public class SimpleTweetEditorUI extends JPanel {
             if (textArea.getText().equals("")) {
                 textArea.setText(model.get("full_text").asText(""));
             }
+            idTF.setText(model.get("id_str").asText(""));
+            tsTF.setText(model.get("created_at").asText(now()));
             final String coords = model.get("coordinates.coordinates") == null
                 ? ""
                 : model.get("coordinates.coordinates").asText();
@@ -551,7 +575,7 @@ public class SimpleTweetEditorUI extends JPanel {
     private String generateJsonFromModel() {
         try {
             if (! model.has("created_at")) {
-                model.set("created_at", TWITTER_TIMESTAMP_FORMAT.format(ZonedDateTime.now()));
+                model.set("created_at", now());
             }
             if (! model.has("id")) {
                 final String id = generateID();
@@ -570,6 +594,10 @@ public class SimpleTweetEditorUI extends JPanel {
             e1.printStackTrace();
         }
         return null;
+    }
+
+    private String now() {
+        return TWITTER_TIMESTAMP_FORMAT.format(ZonedDateTime.now());
     }
 
     /**
