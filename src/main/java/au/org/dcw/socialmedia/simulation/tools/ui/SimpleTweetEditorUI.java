@@ -201,14 +201,19 @@ public class SimpleTweetEditorUI extends JPanel {
         // Create and set up the window
         JFrame frame = new JFrame("Tweet Editor");
         frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+        System.out.println("Frame created");
 
         buildUI();
         frame.setContentPane(this);
+        System.out.println("UI built");
 
         // Display the window
 //        frame.pack();
         frame.setSize(700, 500);
+        System.out.println("Size set");
         frame.setVisible(true);
+
+        System.out.println(SimpleTweetEditorUI.class + " is now running...");
     }
 
     private void buildUI() {
@@ -286,7 +291,51 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.fill = GridBagConstraints.BOTH;
         left.add(scrollPane, gbc);
 
-        // Row 3: use geo checkbox
+
+        // Row 3: ID
+        row++;
+        final JButton idButton = new JButton("ID");
+        idButton.setToolTipText("Press to re-generate ID");
+
+        gbc = new GridBagConstraints();
+        gbc.gridy = row;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(0, 0, 5, 5);
+        left.add(idButton, gbc);
+
+        final JTextField idTF = new JTextField();
+
+        gbc = new GridBagConstraints();
+        gbc.gridy = row;
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(0, 0, 5, 0);
+        left.add(idTF, gbc);
+
+
+        // Row 4: Timestamp
+        row++;
+        final JButton tsButton = new JButton("Timestamp");
+        tsButton.setToolTipText("Press to re-generate timestamp to now");
+
+        gbc = new GridBagConstraints();
+        gbc.gridy = row;
+        gbc.insets = new Insets(0, 0, 5, 5);
+        left.add(tsButton, gbc);
+
+        final JTextField tsTF = new JTextField();
+
+        gbc = new GridBagConstraints();
+        gbc.gridy = row;
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(0, 0, 5, 0);
+        left.add(tsTF, gbc);
+
+
+        // Row 5: use geo checkbox
         row++;
         useGeoCheckbox = new JCheckBox("Use geo?");
         useGeoCheckbox.setSelected(model.get("coordinates") != null);
@@ -299,7 +348,7 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.insets = new Insets(0, 0, 5, 0);
         left.add(useGeoCheckbox, gbc);
 
-        // Row 4: geo panel
+        // Row 6: geo panel
         row++;
         double[] latLon = lookupLatLon();
         geoPanel = new GeoPanel(latLon[0], latLon[1]);
@@ -313,7 +362,7 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.insets = new Insets(0, 0, 5, 0);
         left.add(geoPanel, gbc);
 
-        // Row 5: generate button
+        // Row 7: generate button
         row++;
         final JButton genButton = new JButton("Push JSON to global clipboard");
 
@@ -323,7 +372,7 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         left.add(genButton, gbc);
 
-        // Row 6: new tweet button
+        // Row 8: new tweet button
         row++;
         final JButton newButton = new JButton("New tweet");
 
