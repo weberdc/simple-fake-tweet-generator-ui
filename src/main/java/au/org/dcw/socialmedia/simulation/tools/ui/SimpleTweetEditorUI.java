@@ -26,22 +26,32 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.jxmapviewer.viewer.GeoPosition;
 
+import javax.print.attribute.standard.MediaSize;
 import javax.swing.BorderFactory;
+import javax.swing.DefaultComboBoxModel;
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
+import javax.swing.InputVerifier;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.ListCellRenderer;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
@@ -55,6 +65,8 @@ import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
@@ -63,10 +75,16 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 public class SimpleTweetEditorUI extends JPanel {
 
@@ -140,6 +158,11 @@ public class SimpleTweetEditorUI extends JPanel {
     private static final DateTimeFormatter TWITTER_TIMESTAMP_FORMAT =
         DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss ZZZ yyyy", Locale.ENGLISH);
 
+    private final String[] NAME_PARTS = {
+        "salted", "tables", "benign", "sawfly", "sweaty", "noggin",
+        "willow", "powder", "untorn", "rewire", "placid", "joists"
+    };
+
     @Parameter(names = {"--skip-date"}, description = "Don't bother creating a 'created_at' field.")
     private boolean skipDate = false;
 
@@ -148,7 +171,7 @@ public class SimpleTweetEditorUI extends JPanel {
     private static final Random R = new Random();
     private static boolean help = false;
 
-    private JTextField nameTF;
+    private JComboBox<String> nameCB;
     private JTextArea textArea;
     private JCheckBox useGeoCheckbox;
     private GeoPanel geoPanel;
@@ -156,7 +179,7 @@ public class SimpleTweetEditorUI extends JPanel {
     private JTextField idTF;
     private JTextField tsTF;
 
-
+    private SortedComboBoxModel nameCBModel = new SortedComboBoxModel(new String[]{""});
     private TweetModel model = new TweetModel();
 
     // MAIN
@@ -185,7 +208,7 @@ public class SimpleTweetEditorUI extends JPanel {
 
         loadProxyProperties();
 
-        theApp.run();
+        SwingUtilities.invokeLater(theApp::run);
     }
 
     SimpleTweetEditorUI() throws IOException {
@@ -216,7 +239,8 @@ public class SimpleTweetEditorUI extends JPanel {
         System.out.println("Size set");
         frame.setVisible(true);
 
-        System.out.println(SimpleTweetEditorUI.class + " is now running...");
+        final String fqName = SimpleTweetEditorUI.class.getName();
+        System.out.println(fqName.substring(fqName.lastIndexOf('.') + 1) + " is now running...");
     }
 
     private void buildUI() {
@@ -241,7 +265,8 @@ public class SimpleTweetEditorUI extends JPanel {
 
         // Row 1: name
         int row = 0;
-        final JLabel nameButton = new JLabel("Screen Name:");
+        final JButton nameButton = new JButton("Screen Name:");
+        nameButton.setToolTipText("Click to generate a new random name");
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridy = row;
@@ -249,10 +274,14 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.insets = new Insets(0, 0, 5, 5);
         left.add(nameButton, gbc);
 
-        nameTF = new JTextField(15);
-        nameButton.setLabelFor(nameTF);
-        final Object screenName = model.get("user.screen_name");
-        nameTF.setText(screenName != null ? screenName.toString() : "");
+        nameCB = new JComboBox<>(nameCBModel);
+        nameCB.setEditable(true);
+        final Icon removeIcon = new ImageIcon(this.getClass().getResource("/icons/Remove-16.png"));
+        nameCB.setRenderer(new ButtonComboRenderer(removeIcon, nameCB));
+        final Object screenNameObj = model.get("user.screen_name");
+        final String sn = screenNameObj != null ? screenNameObj.toString() : "";
+        nameCB.addItem(sn);
+        nameCB.setSelectedItem(sn);
 
         gbc = new GridBagConstraints();
         gbc.gridy = row;
@@ -260,7 +289,7 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.weightx = 1.0;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(0, 0, 5, 0);
-        left.add(nameTF, gbc);
+        left.add(nameCB, gbc);
 
         // Row 2: text field
         row++;
@@ -422,7 +451,17 @@ public class SimpleTweetEditorUI extends JPanel {
             }
             updateTextArea();
         });
-        nameTF.addKeyListener(newUpdateOnChangeListener(nameTF,"user.screen_name"));
+        nameCB.addActionListener(e -> {
+            final String newName = (String) nameCB.getSelectedItem();
+            nameCB.addItem(newName);
+            model.set("user.screen_name", newName);
+            updateTextArea();
+        });
+        nameButton.addActionListener(e -> {
+            final String newName = generateName(nameCBModel.getElements());
+            nameCB.addItem(newName);
+            nameCB.setSelectedItem(newName); // will trigger the ActionListener above
+        });
         textArea.addKeyListener(newUpdateOnChangeListener(textArea,"text"));
         textArea.addKeyListener(newUpdateOnChangeListener(textArea,"full_text"));
         idButton.addActionListener(e -> {
@@ -442,6 +481,18 @@ public class SimpleTweetEditorUI extends JPanel {
             model.set("created_at", now);
             tsTF.setText(now);
         });
+//        tsTF.setInputVerifier(new InputVerifier() {
+//            @Override
+//            public boolean verify(JComponent input) {
+//                final String newTS = ((JTextField) input).getText();
+//                try {
+//                    TWITTER_TIMESTAMP_FORMAT.parse(newTS);
+//                    return true;
+//                } catch (DateTimeParseException e) {
+//                    return false;
+//                }
+//            }
+//        });
         geoPanel.addObserver(e -> {
             if (useGeoCheckbox.isSelected()) {
                 GeoPosition centre = (GeoPosition) e.getNewValue();
@@ -492,12 +543,24 @@ public class SimpleTweetEditorUI extends JPanel {
         });
     }
 
+    private String generateName(final List<String> elements) {
+        String newName;
+        do {
+            final int index1 = (int) Math.floor(Math.random() * NAME_PARTS.length);
+            final int index2 = (int) Math.floor(Math.random() * NAME_PARTS.length);
+            newName = NAME_PARTS[index1] + "." + NAME_PARTS[index2];
+        } while (elements.contains(newName));
+        return newName;
+    }
+
     private void updateUIFromModel(String hopefullyJSON) throws IOException {
         model.root = JSON.readValue(hopefullyJSON, JsonNode.class); // try it out
         if (hopefullyJSON != null) {
             // update the text areas
             jsonTextArea.setText(hopefullyJSON);
-            nameTF.setText(model.get("user.screen_name").asText(""));
+            String sn = model.get("user.screen_name").asText("");
+            nameCB.addItem(sn);
+            nameCB.setSelectedItem(sn);
             textArea.setText(model.get("text").asText(""));
             if (textArea.getText().equals("")) {
                 textArea.setText(model.get("full_text").asText(""));
@@ -658,4 +721,109 @@ public class SimpleTweetEditorUI extends JPanel {
         }
         return properties;
     }
+
+    /**
+     * Borrowed from https://stackoverflow.com/questions/7387299/dynamically-adding-items-to-a-jcombobox
+     */
+    private class SortedComboBoxModel extends DefaultComboBoxModel<String> {
+
+        private static final long serialVersionUID = 1L;
+
+        public SortedComboBoxModel(final String[] items) {
+            Stream.of(items).sorted().filter(Objects::nonNull).forEach(this::addElement);
+            setSelectedItem(items[0]);
+        }
+
+        @Override
+        public void addElement(final String element) {
+            if (element == null) return;
+            for (int i = 0; i < getSize(); i++) {
+                Object elementAtI = getElementAt(i);
+                if (elementAtI.equals(element)) {
+                    return; // already present
+                }
+            }
+
+            insertElementAt(element, 0);
+        }
+
+        @Override
+        public void insertElementAt(final String element, int index) {
+            if (element == null) return;
+            int size = getSize();
+            //  Determine where to insert element to keep model in sorted order
+            for (index = 0; index < size; index++) {
+                Comparable c = getElementAt(index);
+                if (c.compareTo(element) > 0) {
+                    break;
+                }
+            }
+            super.insertElementAt(element, index);
+        }
+
+        public List<String> getElements() {
+            return IntStream.range(0, getSize()).mapToObj(this::getElementAt).collect(Collectors.toList());
+        }
+    }
+
+    /**
+     * Grabbed from https://stackoverflow.com/questions/11065282/display-buttons-in-jcombobox-items
+     */
+    class ButtonComboRenderer implements ListCellRenderer {
+        final Icon icon;
+        final JPanel panel;
+        final JLabel label;
+        final JButton button;
+
+        public ButtonComboRenderer(final Icon removeIcon, final JComboBox<String> combo) {
+            icon = removeIcon;
+            label = new JLabel();
+            button = new JButton(icon);
+            button.setPreferredSize(new Dimension(icon.getIconWidth(), icon.getIconHeight()));
+            panel = new JPanel(new BorderLayout());
+            panel.add(label);
+            panel.add(button, BorderLayout.EAST);
+            panel.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mousePressed(MouseEvent e) {
+                    if (button.getX() < e.getX()) {
+//                        System.out.println("button contains the click remove the item");
+                        combo.removeItem(label.getText());
+                    }
+                }
+            });
+        }
+        //so we will install the mouse listener once
+        boolean isFirst = true;
+
+        @Override
+        public Component getListCellRendererComponent(
+            final JList list,
+            final Object value,
+            final int index,
+            final boolean isSelected,
+            final boolean cellHasFocus
+        ) {
+            if (isFirst) {
+                isFirst = false;
+                list.addMouseListener(new MouseAdapter() {
+                    @Override
+                    public void mousePressed(MouseEvent e) {
+                        panel.dispatchEvent(e);
+                        e.consume();
+                    }
+                });
+            }
+            String text = (String) value;
+            label.setText(text);
+            if (text == null)
+                button.setIcon(null);
+            else if (button.getIcon() == null)
+                button.setIcon(icon);
+            panel.setBackground(isSelected ? Color.YELLOW : Color.WHITE);
+            panel.setForeground(isSelected ? Color.WHITE : Color.BLACK);
+            return panel;
+        }
+    }
+
 }
