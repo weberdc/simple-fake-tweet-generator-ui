@@ -26,7 +26,6 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.jxmapviewer.viewer.GeoPosition;
 
-import javax.print.attribute.standard.MediaSize;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.Icon;
@@ -76,7 +75,6 @@ import java.nio.file.Paths;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -156,7 +154,7 @@ public class SimpleTweetEditorUI extends JPanel {
     }
 
     private static final DateTimeFormatter TWITTER_TIMESTAMP_FORMAT =
-        DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss ZZZ yyyy", Locale.ENGLISH);
+        DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss Z yyyy", Locale.ENGLISH);
 
     private final String[] NAME_PARTS = {
         "salted", "tables", "benign", "sawfly", "sweaty", "noggin",
@@ -265,7 +263,7 @@ public class SimpleTweetEditorUI extends JPanel {
 
         // Row 1: name
         int row = 0;
-        final JButton nameButton = new JButton("Screen Name:");
+        final JButton nameButton = new JButton("Screen Name");
         nameButton.setToolTipText("Click to generate a new random name");
 
         GridBagConstraints gbc = new GridBagConstraints();
@@ -293,11 +291,12 @@ public class SimpleTweetEditorUI extends JPanel {
 
         // Row 2: text field
         row++;
-        final JLabel textLabel = new JLabel("Text:");
+        final JLabel textLabel = new JLabel("Tweet Text");
 
         gbc = new GridBagConstraints();
         gbc.gridy = row;
         gbc.gridx = 0;
+        gbc.anchor = GridBagConstraints.NORTH;
         gbc.insets = new Insets(0, 0, 5, 5);
         left.add(textLabel, gbc);
 
@@ -354,6 +353,7 @@ public class SimpleTweetEditorUI extends JPanel {
 
         gbc = new GridBagConstraints();
         gbc.gridy = row;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(0, 0, 5, 5);
         left.add(tsButton, gbc);
 
@@ -481,18 +481,19 @@ public class SimpleTweetEditorUI extends JPanel {
             model.set("created_at", now);
             tsTF.setText(now);
         });
-//        tsTF.setInputVerifier(new InputVerifier() {
-//            @Override
-//            public boolean verify(JComponent input) {
-//                final String newTS = ((JTextField) input).getText();
-//                try {
-//                    TWITTER_TIMESTAMP_FORMAT.parse(newTS);
-//                    return true;
-//                } catch (DateTimeParseException e) {
-//                    return false;
-//                }
-//            }
-//        });
+        tsTF.setInputVerifier(new InputVerifier() {
+            @Override
+            public boolean verify(JComponent input) {
+                final String newTS = ((JTextField) input).getText();
+                try {
+                    TWITTER_TIMESTAMP_FORMAT.parse(newTS);
+                    return true;
+                } catch (DateTimeParseException e) {
+                    System.err.println("Can't parse timestamp: " + e.getMessage());
+                    return false;
+                }
+            }
+        });
         geoPanel.addObserver(e -> {
             if (useGeoCheckbox.isSelected()) {
                 GeoPosition centre = (GeoPosition) e.getNewValue();
