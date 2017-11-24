@@ -417,11 +417,13 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.gridy = row;
         gbc.gridwidth = 2;
         gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(0, 0, 5, 0);
         left.add(genButton, gbc);
 
         // Row 8: new tweet button
         row++;
-        final JButton newButton = new JButton("New tweet");
+        final JButton newButton = new JButton("New Tweet");
+        newButton.setToolTipText("Refresh the editor for a new Tweet");
 
         gbc = new GridBagConstraints();
         gbc.gridy = row;
