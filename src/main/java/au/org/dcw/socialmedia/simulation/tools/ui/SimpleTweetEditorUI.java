@@ -282,7 +282,6 @@ public class SimpleTweetEditorUI extends JPanel {
         nameCB.setRenderer(new ButtonComboRenderer(removeIcon, nameCB));
         final Object screenNameObj = model.get("user.screen_name");
         final String sn = screenNameObj != null ? screenNameObj.toString() : "";
-        System.out.println("screenName: >" + screenNameObj + "<");
         if (sn.equals("\"\"")) { // rescue us from the terrible "" bug!
             model.set("user.screen_name", "");
         } else {
@@ -450,6 +449,7 @@ public class SimpleTweetEditorUI extends JPanel {
             JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
             JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED
         );
+        jsonScrollPane.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
 
         right.add(jsonScrollPane, BorderLayout.CENTER);
 
@@ -528,7 +528,7 @@ public class SimpleTweetEditorUI extends JPanel {
                 GeoPosition centre = (GeoPosition) e.getNewValue();
                 model.set("geo", makeLatLonJsonNode(centre.getLatitude(), centre.getLongitude()));
                 model.set("coordinates", makeLatLonJsonNode(centre.getLongitude(), centre.getLatitude()));
-                updateJsonTextArea();
+                SwingUtilities.invokeLater(this::updateJsonTextArea); // makes the UI a little more responsive
             }
         });
         // paste from clipboard to the full json text area
