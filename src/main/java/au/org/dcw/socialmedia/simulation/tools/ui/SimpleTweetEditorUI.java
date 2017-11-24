@@ -282,8 +282,13 @@ public class SimpleTweetEditorUI extends JPanel {
         nameCB.setRenderer(new ButtonComboRenderer(removeIcon, nameCB));
         final Object screenNameObj = model.get("user.screen_name");
         final String sn = screenNameObj != null ? screenNameObj.toString() : "";
-        nameCB.addItem(sn);
-        nameCB.setSelectedItem(sn);
+        System.out.println("screenName: >" + screenNameObj + "<");
+        if (sn.equals("\"\"")) { // rescue us from the terrible "" bug!
+            model.set("user.screen_name", "");
+        } else {
+            nameCB.addItem(sn);
+            nameCB.setSelectedItem(sn);
+        }
 
         gbc = new GridBagConstraints();
         gbc.gridy = row;
@@ -310,6 +315,10 @@ public class SimpleTweetEditorUI extends JPanel {
         Object text = model.get("text");
         if (text == null || text.toString().length() == 0) {
             text = model.get("full_text");
+        }
+        if (text!= null && text.toString().equals("\"\"")) {
+            // rescue us from the dreaded "" bug (must be Jackson)
+            text = "";
         }
         textArea.setText(text != null ? text.toString() : "");
 
