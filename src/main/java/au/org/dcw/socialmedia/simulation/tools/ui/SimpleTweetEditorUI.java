@@ -90,73 +90,6 @@ import java.util.stream.Stream;
 
 public class SimpleTweetEditorUI extends JPanel {
 
-    class TweetModel {
-        JsonNode root;
-
-        JsonNode get(final String path) {
-            return getNested(root, path);
-        }
-
-        JsonNode getNested(final JsonNode obj, final String path) {
-            if (path.contains(".")) {
-                final String head = path.substring(0, path.indexOf('.'));
-                final String tail = path.substring(path.indexOf('.') + 1);
-                if (obj.has(head)) {
-                    return getNested(obj.get(head), tail);
-                } else {
-                    System.err.println("Could not find sub-path: " + tail);
-                    return JsonNodeFactory.instance.nullNode(); // error!
-                }
-            } else {
-                return obj.has(path) ? obj.get(path) : JsonNodeFactory.instance.nullNode();
-            }
-        }
-
-        public void set(String path, Object value) {
-            setNested((ObjectNode) root, path, value);
-        }
-
-        void setNested(final ObjectNode obj, final String path, final Object value) {
-            if (path.contains(".")) {
-                final String head = path.substring(0, path.indexOf('.'));
-                final String tail = path.substring(path.indexOf('.') + 1);
-                if (obj.has(head)) {
-                    setNested((ObjectNode) obj.get(head), tail, value);
-                } else {
-                    System.err.println("Could not find sub-path: " + tail);
-                }
-            } else {
-                final JsonNodeFactory jsonNodeFactory = JsonNodeFactory.instance;
-                if (value == null) {
-                    obj.set(path, jsonNodeFactory.nullNode());
-                } else if (value instanceof JsonNode) {
-                    obj.set(path, (JsonNode) value);
-                } else if (value instanceof String) {
-                    obj.set(path, jsonNodeFactory.textNode(value.toString()));
-                } else if (value instanceof double[]) { //value.getClass().isArray()) {
-                    final ArrayNode arrayNode = jsonNodeFactory.arrayNode();
-                    double[] array = (double[]) value;
-                    arrayNode.add(array[0]);
-                    arrayNode.add(array[1]);
-                    obj.set(path, arrayNode);
-                }
-            }
-        }
-
-        public boolean has(final String path) {
-            return has(root, path);
-        }
-
-        public boolean has(final JsonNode obj, final String path) {
-            if (path.contains(".")) {
-                final String head = path.substring(0, path.indexOf('.'));
-                final String tail = path.substring(path.indexOf('.') + 1);
-                return obj.has(head) && has(obj.get(head), tail);
-            }
-            return obj.has(path);
-        }
-    }
-
     private static final DateTimeFormatter TWITTER_TIMESTAMP_FORMAT =
         DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss Z yyyy", Locale.ENGLISH);
 
@@ -754,6 +687,73 @@ public class SimpleTweetEditorUI extends JPanel {
             properties.forEach((k, v) -> System.setProperty(k.toString(), v.toString()));
         }
         return properties;
+    }
+
+    class TweetModel {
+        JsonNode root;
+
+        JsonNode get(final String path) {
+            return getNested(root, path);
+        }
+
+        JsonNode getNested(final JsonNode obj, final String path) {
+            if (path.contains(".")) {
+                final String head = path.substring(0, path.indexOf('.'));
+                final String tail = path.substring(path.indexOf('.') + 1);
+                if (obj.has(head)) {
+                    return getNested(obj.get(head), tail);
+                } else {
+                    System.err.println("Could not find sub-path: " + tail);
+                    return JsonNodeFactory.instance.nullNode(); // error!
+                }
+            } else {
+                return obj.has(path) ? obj.get(path) : JsonNodeFactory.instance.nullNode();
+            }
+        }
+
+        public void set(String path, Object value) {
+            setNested((ObjectNode) root, path, value);
+        }
+
+        void setNested(final ObjectNode obj, final String path, final Object value) {
+            if (path.contains(".")) {
+                final String head = path.substring(0, path.indexOf('.'));
+                final String tail = path.substring(path.indexOf('.') + 1);
+                if (obj.has(head)) {
+                    setNested((ObjectNode) obj.get(head), tail, value);
+                } else {
+                    System.err.println("Could not find sub-path: " + tail);
+                }
+            } else {
+                final JsonNodeFactory jsonNodeFactory = JsonNodeFactory.instance;
+                if (value == null) {
+                    obj.set(path, jsonNodeFactory.nullNode());
+                } else if (value instanceof JsonNode) {
+                    obj.set(path, (JsonNode) value);
+                } else if (value instanceof String) {
+                    obj.set(path, jsonNodeFactory.textNode(value.toString()));
+                } else if (value instanceof double[]) { //value.getClass().isArray()) {
+                    final ArrayNode arrayNode = jsonNodeFactory.arrayNode();
+                    double[] array = (double[]) value;
+                    arrayNode.add(array[0]);
+                    arrayNode.add(array[1]);
+                    obj.set(path, arrayNode);
+                }
+            }
+        }
+
+        public boolean has(final String path) {
+            return has(root, path);
+        }
+
+        public boolean has(final JsonNode obj, final String path) {
+            if (path.contains(".")) {
+                final String head = path.substring(0, path.indexOf('.'));
+                final String tail = path.substring(path.indexOf('.') + 1);
+                return obj.has(head) && has(obj.get(head), tail);
+            }
+            return obj.has(path);
+        }
     }
 
     /**
