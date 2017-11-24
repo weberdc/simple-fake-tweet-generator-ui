@@ -47,6 +47,8 @@ import javax.swing.JTextField;
 import javax.swing.ListCellRenderer;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -61,6 +63,8 @@ import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.UnsupportedFlavorException;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
@@ -419,21 +423,29 @@ public class SimpleTweetEditorUI extends JPanel {
         // RIGHT
 
         jsonTextArea = new JTextArea();
-        jsonTextArea.setLineWrap(true);
-        jsonTextArea.setWrapStyleWord(true);
+        jsonTextArea.setLineWrap(false);
+        jsonTextArea.setWrapStyleWord(false);
+        jsonTextArea.setEditable(false);
         jsonTextArea.setFont(new Font("Courier New", Font.PLAIN, 12));
+        jsonTextArea.setToolTipText(
+            "<html>Pretty-printed version of the JSON to be produced.<br>" +
+            "(Not editable in this panel.)</html>"
+        );
 
-        updateTextArea();
+        updateJsonTextArea();
 
         final JScrollPane jsonScrollPane = new JScrollPane(
             jsonTextArea,
             JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
-            JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+            JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED
         );
 
         right.add(jsonScrollPane, BorderLayout.CENTER);
 
-        final JButton pasteFromClipboardButton = new JButton("Paste from clipboard");
+        final JButton pasteFromClipboardButton = new JButton("Paste Tweet from clipboard");
+        pasteFromClipboardButton.setToolTipText(
+            "<html>To edit the fields of an existing Tweet,<br>paste its JSON with this button.</html>"
+        );
 
         right.add(pasteFromClipboardButton, BorderLayout.SOUTH);
 
@@ -449,21 +461,27 @@ public class SimpleTweetEditorUI extends JPanel {
                 model.set("geo", makeLatLonJsonNode(ll[0], ll[1]));
                 model.set("coordinates", makeLatLonJsonNode(ll[1], ll[0]));
             }
-            updateTextArea();
+            updateJsonTextArea();
         });
         nameCB.addActionListener(e -> {
             final String newName = (String) nameCB.getSelectedItem();
             nameCB.addItem(newName);
             model.set("user.screen_name", newName);
-            updateTextArea();
+            updateJsonTextArea();
         });
         nameButton.addActionListener(e -> {
             final String newName = generateName(nameCBModel.getElements());
             nameCB.addItem(newName);
             nameCB.setSelectedItem(newName); // will trigger the ActionListener above
         });
-        textArea.addKeyListener(newUpdateOnChangeListener(textArea,"text"));
-        textArea.addKeyListener(newUpdateOnChangeListener(textArea,"full_text"));
+        textArea.getDocument().addDocumentListener(newUpdateOnChangeListener(() -> {
+            model.set("text", textArea.getText());
+            updateJsonTextArea();
+        }));
+        textArea.getDocument().addDocumentListener(newUpdateOnChangeListener(() -> {
+            model.set("full_text", textArea.getText());
+            updateJsonTextArea();
+        }));
         idButton.addActionListener(e -> {
             if (JOptionPane.showConfirmDialog(
                 SimpleTweetEditorUI.this,
@@ -499,7 +517,7 @@ public class SimpleTweetEditorUI extends JPanel {
                 GeoPosition centre = (GeoPosition) e.getNewValue();
                 model.set("geo", makeLatLonJsonNode(centre.getLatitude(), centre.getLongitude()));
                 model.set("coordinates", makeLatLonJsonNode(centre.getLongitude(), centre.getLatitude()));
-                updateTextArea();
+                updateJsonTextArea();
             }
         });
         // paste from clipboard to the full json text area
@@ -554,11 +572,12 @@ public class SimpleTweetEditorUI extends JPanel {
         return newName;
     }
 
-    private void updateUIFromModel(String hopefullyJSON) throws IOException {
+    private void updateUIFromModel(final String hopefullyJSON) throws IOException {
         model.root = JSON.readValue(hopefullyJSON, JsonNode.class); // try it out
         if (hopefullyJSON != null) {
             // update the text areas
-            jsonTextArea.setText(hopefullyJSON);
+            updateJsonTextArea();
+//            jsonTextArea.setText(hopefullyJSON);
             String sn = model.get("user.screen_name").asText("");
             nameCB.addItem(sn);
             nameCB.setSelectedItem(sn);
@@ -584,13 +603,16 @@ public class SimpleTweetEditorUI extends JPanel {
         }
     }
 
-    private KeyListener newUpdateOnChangeListener(final JTextComponent tc, final String propertyPath) {
-        return new KeyAdapter() {
+    private DocumentListener newUpdateOnChangeListener(final Runnable runnable) {
+        return new DocumentListener() {
             @Override
-            public void keyTyped(KeyEvent e) {
-                model.set(propertyPath, tc.getText());
-                updateTextArea();
-            }
+            public void insertUpdate(DocumentEvent e) { runnable.run(); }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) { runnable.run(); }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) { runnable.run(); }
         };
     }
 
@@ -604,10 +626,10 @@ public class SimpleTweetEditorUI extends JPanel {
         }
     }
 
-    private void updateTextArea() {
+    private void updateJsonTextArea() {
         SwingUtilities.invokeLater(() -> {
             try {
-                jsonTextArea.setText(JSON.writeValueAsString(model.root));
+                jsonTextArea.setText(JSON.writerWithDefaultPrettyPrinter().writeValueAsString(model.root));
             } catch (JsonProcessingException e) {
                 System.err.println("Error generating JSON");
                 e.printStackTrace();
@@ -646,8 +668,8 @@ public class SimpleTweetEditorUI extends JPanel {
                 model.set("id", BigDecimal.valueOf(Double.parseDouble(id)));
                 model.set("id_str", id);
             }
-
             return JSON.writeValueAsString(model.root);
+
         } catch (JsonProcessingException e1) {
             JOptionPane.showMessageDialog(
                 SimpleTweetEditorUI.this,
