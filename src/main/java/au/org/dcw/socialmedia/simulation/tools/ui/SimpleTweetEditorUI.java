@@ -24,6 +24,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.twitter.Extractor;
 import org.jxmapviewer.viewer.GeoPosition;
 
 import javax.swing.BorderFactory;
@@ -49,7 +52,6 @@ import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -63,11 +65,6 @@ import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.UnsupportedFlavorException;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -79,8 +76,10 @@ import java.nio.file.Paths;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
@@ -92,6 +91,7 @@ public class SimpleTweetEditorUI extends JPanel {
 
     private static final DateTimeFormatter TWITTER_TIMESTAMP_FORMAT =
         DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss Z yyyy", Locale.ENGLISH);
+    public static final int TWITTER_OLD_MAX_LENGTH = 140;
 
     private final String[] NAME_PARTS = {
         "salted", "tables", "benign", "sawfly", "sweaty", "noggin",
@@ -102,6 +102,7 @@ public class SimpleTweetEditorUI extends JPanel {
     private boolean skipDate = false;
 
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final Extractor TWITTER_EXTRACTOR = new Extractor();
     private static final int ID_LENGTH = 16;
     private static final Random R = new Random();
     private static boolean help = false;
@@ -322,10 +323,25 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc = new GridBagConstraints();
         gbc.gridy = row;
         gbc.gridx = 0;
-        gbc.gridwidth = 2;
         gbc.anchor = GridBagConstraints.WEST;
         gbc.insets = new Insets(0, 0, 5, 0);
         left.add(useGeoCheckbox, gbc);
+
+        final JCheckBox addPlaceCheckbox = new JCheckBox("Add \"place\" field?");
+        addPlaceCheckbox.setToolTipText(
+            "<html>Uses Twitter's APIs to lookup place information for the<br>" +
+            "selected geo location (requires Twitter credentials).</html>"
+        );
+        Object twitter = null;
+        addPlaceCheckbox.setEnabled(twitter != null);
+        addPlaceCheckbox.setSelected(twitter != null);
+
+        gbc = new GridBagConstraints();
+        gbc.gridy = row;
+        gbc.gridx = 1;
+        gbc.anchor = GridBagConstraints.EAST;
+        gbc.insets = new Insets(0, 0, 5, 0);
+        left.add(addPlaceCheckbox, gbc);
 
         // Row 6: geo panel
         row++;
@@ -343,14 +359,14 @@ public class SimpleTweetEditorUI extends JPanel {
 
         // Row 7: generate button
         row++;
-        final JButton genButton = new JButton("Push JSON to global clipboard");
+        final JButton generateJsonButton = new JButton("Push JSON to global clipboard");
 
         gbc = new GridBagConstraints();
         gbc.gridy = row;
         gbc.gridwidth = 2;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(0, 0, 5, 0);
-        left.add(genButton, gbc);
+        left.add(generateJsonButton, gbc);
 
         // Row 8: new tweet button
         row++;
@@ -419,12 +435,7 @@ public class SimpleTweetEditorUI extends JPanel {
             nameCB.setSelectedItem(newName); // will trigger the ActionListener above
         });
         textArea.getDocument().addDocumentListener(newUpdateOnChangeListener(() -> {
-            model.set("text", textArea.getText());
-            updateJsonTextArea();
-        }));
-        textArea.getDocument().addDocumentListener(newUpdateOnChangeListener(() -> {
-            model.set("full_text", textArea.getText());
-            updateJsonTextArea();
+            updateModelAndUIWithNewText(textArea.getText());
         }));
         idButton.addActionListener(e -> {
             if (JOptionPane.showConfirmDialog(
@@ -483,7 +494,7 @@ public class SimpleTweetEditorUI extends JPanel {
                 );
             }
         });
-        genButton.addActionListener(e -> {
+        generateJsonButton.addActionListener(e -> {
             final String json = generateJsonFromModel();
             if (json != null) {
                 pushToClipboard(json);
@@ -506,6 +517,14 @@ public class SimpleTweetEditorUI extends JPanel {
         });
     }
 
+    private void updateModelAndUIWithNewText(final String newText) {
+        model.set("text", newText);
+        model.set("truncated", newText.length() > TWITTER_OLD_MAX_LENGTH);
+        model.set("full_text", newText);
+        model.set("entities", extractEntitiesAsJsonNodeTree(newText, model.get("entities.media")));
+        updateJsonTextArea();
+    }
+
     private String generateName(final List<String> elements) {
         String newName;
         do {
@@ -519,15 +538,16 @@ public class SimpleTweetEditorUI extends JPanel {
     private void updateUIFromModel(final String hopefullyJSON) throws IOException {
         model.root = JSON.readValue(hopefullyJSON, JsonNode.class); // try it out
         if (hopefullyJSON != null) {
-            // update the text areas
             updateJsonTextArea();
-//            jsonTextArea.setText(hopefullyJSON);
-            String sn = model.get("user.screen_name").asText("");
+            final String sn = model.get("user.screen_name").asText("");
             nameCB.addItem(sn);
             nameCB.setSelectedItem(sn);
-            textArea.setText(model.get("text").asText(""));
+            textArea.setText(model.get("full_text").asText("")); // get the full text first
             if (textArea.getText().equals("")) {
-                textArea.setText(model.get("full_text").asText(""));
+                textArea.setText(model.get("extended_tweet.full_text").asText(""));
+            }
+            if (textArea.getText().equals("")) {
+                textArea.setText(model.get("text").asText(""));
             }
             idTF.setText(model.get("id_str").asText(""));
             tsTF.setText(model.get("created_at").asText(now()));
@@ -604,14 +624,14 @@ public class SimpleTweetEditorUI extends JPanel {
 
     private String generateJsonFromModel() {
         try {
-            if (! model.has("created_at")) {
-                model.set("created_at", now());
-            }
-            if (! model.has("id")) {
-                final String id = generateID();
-                model.set("id", BigDecimal.valueOf(Double.parseDouble(id)));
-                model.set("id_str", id);
-            }
+//            if (! model.has("created_at")) {
+//                model.set("created_at", now());
+//            }
+//            if (! model.has("id")) {
+//                final String id = generateID();
+//                model.set("id", BigDecimal.valueOf(Double.parseDouble(id)));
+//                model.set("id_str", id);
+//            }
             return JSON.writeValueAsString(model.root);
 
         } catch (JsonProcessingException e1) {
@@ -689,6 +709,55 @@ public class SimpleTweetEditorUI extends JPanel {
         return properties;
     }
 
+
+    private JsonNode extractEntitiesAsJsonNodeTree(final String newText, final JsonNode mediaEntities) {
+        Map<String, List<Object>> entityMap = Maps.newTreeMap();
+        entityMap.put("hashtags", Lists.newArrayList());
+        entityMap.put("symbols", Lists.newArrayList());
+        entityMap.put("user_mentions", Lists.newArrayList());
+        entityMap.put("urls", Lists.newArrayList());
+
+        for (Extractor.Entity e : TWITTER_EXTRACTOR.extractURLsWithIndices(newText)) {
+            Map<String, Object> urlMap = Maps.newTreeMap();
+            urlMap.put("url", e.getValue());
+            urlMap.put("extended_url", e.getExpandedURL() != null ? e.getExpandedURL() : e.getValue());
+            urlMap.put("display_url", e.getDisplayURL() != null ? e.getDisplayURL() : e.getValue());
+            urlMap.put("indices", Arrays.asList(e.getStart(), e.getEnd()));
+            entityMap.get("urls").add(urlMap);
+        }
+
+        for (Extractor.Entity e : TWITTER_EXTRACTOR.extractMentionedScreennamesWithIndices(newText)) {
+            Map<String, Object> mentionMap = Maps.newTreeMap();
+            mentionMap.put("screen_name", e.getValue());
+            mentionMap.put("name", null); // need reverse-lookup to get most of these values
+            mentionMap.put("id", null);
+            mentionMap.put("id_str", null);
+            mentionMap.put("indices", Arrays.asList(e.getStart(), e.getEnd()));
+            entityMap.get("user_mentions").add(mentionMap);
+        }
+
+        for (Extractor.Entity e : TWITTER_EXTRACTOR.extractHashtagsWithIndices(newText)) {
+            Map<String, Object> hashtagMap = Maps.newTreeMap();
+            hashtagMap.put("text", e.getValue());
+            hashtagMap.put("indices", Arrays.asList(e.getStart(), e.getEnd()));
+            entityMap.get("hashtags").add(hashtagMap);
+        }
+
+        for (Extractor.Entity e : TWITTER_EXTRACTOR.extractCashtagsWithIndices(newText)) {
+            Map<String, Object> cashtagMap = Maps.newTreeMap();
+            cashtagMap.put("text", e.getValue());
+            cashtagMap.put("indices", Arrays.asList(e.getStart(), e.getEnd()));
+            entityMap.get("symbols").add(cashtagMap);
+        }
+
+        final JsonNode entitiesRoot = JSON.valueToTree(entityMap);
+        if (mediaEntities != JsonNodeFactory.instance.nullNode()) {
+            ((ObjectNode) entitiesRoot).set("media", mediaEntities);
+        }
+        return entitiesRoot;
+    }
+
+
     class TweetModel {
         JsonNode root;
 
@@ -730,6 +799,8 @@ public class SimpleTweetEditorUI extends JPanel {
                     obj.set(path, jsonNodeFactory.nullNode());
                 } else if (value instanceof JsonNode) {
                     obj.set(path, (JsonNode) value);
+                } else if (value instanceof Boolean) {
+                    obj.set(path, jsonNodeFactory.booleanNode((Boolean) value));
                 } else if (value instanceof String) {
                     obj.set(path, jsonNodeFactory.textNode(value.toString()));
                 } else if (value instanceof double[]) { //value.getClass().isArray()) {

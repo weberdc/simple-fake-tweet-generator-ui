@@ -2,10 +2,13 @@
 
 Author: **Derek Weber**
 
-Last updated: **2017-11-13**
+Last updated: **2017-11-26**
 
-Simple GUI tool to create a selection of fields to generate important
-bits of a fake tweet.
+Simple GUI tool to edit fields of a tweet or create a new one with a (probably
+invalid) subset of a Tweet's fields.
+
+**NB** Does not fully comply with the changes made to Tweets recently (late 2017),
+described [here](https://developer.twitter.com/en/docs/tweets/tweet-updates). 
 
 
 ## Description

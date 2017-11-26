@@ -14,6 +14,7 @@ mainClassName = 'au.org.dcw.socialmedia.simulation.tools.ui.SimpleTweetEditorUI'
 
 repositories {
     jcenter()
+    mavenCentral()
 }
 
 dependencies {
@@ -21,4 +22,5 @@ dependencies {
     compile 'com.google.guava:guava:23.0'
     compile 'org.jxmapviewer:jxmapviewer2:2.2'
     compile 'com.beust:jcommander:1.72'
+    compile 'com.twitter:twitter-text:1.14.7'
 }
