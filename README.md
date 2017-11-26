@@ -77,7 +77,17 @@ Otherwise, if you've just built the app from source, do this from within
 `PROJECT_ROOT/build/install/simple-fake-tweet-generator-ui`:
 
 <pre>
-Usage: bin/simple-fake-tweet-generator-ui[.bat]
+Usage: bin/simple-fake-tweet-generator-ui[.bat] [options]
+  Options:
+    -c, --credentials
+      Properties file with Twitter OAuth credentials
+      Default: ./twitter.properties
+    -h, -?, --help
+      Help
+      Default: false
+    --skip-date
+      Don't bother creating a 'created_at' field.
+      Default: false
 </pre>
 
 Run the app with no other commandline arguments:
