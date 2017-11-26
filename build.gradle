@@ -23,4 +23,35 @@ dependencies {
     compile 'org.jxmapviewer:jxmapviewer2:2.2'
     compile 'com.beust:jcommander:1.72'
     compile 'com.twitter:twitter-text:1.14.7'
+    compile 'org.twitter4j:twitter4j-core:4.0.6'
+}
+
+def timestamp() {
+    def date = new Date()
+    return date.format('yyyyMMddHHmmss')
+}
+
+distributions {
+    main {
+        contents {
+            from { 'README.md' }
+            from { 'LICENSE' }
+            from { 'twitter.properties-template' }
+            from { 'proxy.properties-template' }
+        }
+    }
+    timestamped {
+        baseName = project.name + '-SNAPSHOT-' + timestamp()
+        contents {
+            with main.contents
+        }
+    }
+    privileged {
+        baseName = project.name + '_with-credentials-SNAPSHOT-' + timestamp()
+        contents {
+            with main.contents
+            // include own twitter credentials
+            from { 'twitter.properties' }
+        }
+    }
 }

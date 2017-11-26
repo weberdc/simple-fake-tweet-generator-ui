@@ -26,6 +26,12 @@ corresponding `id_str` fields. Future versions may include a mapping component
 to visually select a geolocation.
 
 
+Twitter credentials are looked for in `"./twitter.properties"`, and proxy info
+is looked for in `"./proxy.properties"`. Commandline options for the input file,
+the output file, and the Twitter properties are provided, along with a verbose
+mode.
+
+
 ## Requirements:
 
  + Java Development Kit 1.8
@@ -51,6 +57,12 @@ you will create an installable copy of the app in `PROJECT_ROOT/build/simple-fak
 
 ## Configuration
 
+Twitter OAuth credentials must be available in a properties file based on the
+provided `twitter.properties-template` in the project's root directory. Copy the
+template file to a properties file (the default is `twitter.properties` in the
+same directory), and edit it with your Twitter app credentials. For further
+information see [http://twitter4j.org/en/configuration.html]().
+
 If running the app behind a proxy or filewall, copy the
 `proxy.properties-template` file to a file named `proxy.properties` and set the
 properties inside to your proxy credentials. If you feel uncomfortable putting
@@ -72,3 +84,10 @@ Run the app with no other commandline arguments:
 <pre>
 prompt> bin/simple-fake-tweet-generator-ui
 </pre>
+
+
+## Rate limits
+
+Attempts have been made to account for Twitter's rate limits, so at times the
+app will pause, waiting until the rate limit has refreshed. It reports how long
+it will wait when it does have to pause.

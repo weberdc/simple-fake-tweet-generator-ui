@@ -28,6 +28,19 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.twitter.Extractor;
 import org.jxmapviewer.viewer.GeoPosition;
+import twitter4j.GeoLocation;
+import twitter4j.GeoQuery;
+import twitter4j.Place;
+import twitter4j.RateLimitStatus;
+import twitter4j.RateLimitStatusEvent;
+import twitter4j.RateLimitStatusListener;
+import twitter4j.ResponseList;
+import twitter4j.Twitter;
+import twitter4j.TwitterException;
+import twitter4j.TwitterFactory;
+import twitter4j.TwitterObjectFactory;
+import twitter4j.conf.Configuration;
+import twitter4j.conf.ConfigurationBuilder;
 
 import javax.swing.BorderFactory;
 import javax.swing.DefaultComboBoxModel;
@@ -77,6 +90,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -91,7 +105,7 @@ public class SimpleTweetEditorUI extends JPanel {
 
     private static final DateTimeFormatter TWITTER_TIMESTAMP_FORMAT =
         DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss Z yyyy", Locale.ENGLISH);
-    public static final int TWITTER_OLD_MAX_LENGTH = 140;
+    private static final int TWITTER_OLD_MAX_LENGTH = 140;
 
     private final String[] NAME_PARTS = {
         "salted", "tables", "benign", "sawfly", "sweaty", "noggin",
@@ -101,22 +115,35 @@ public class SimpleTweetEditorUI extends JPanel {
     @Parameter(names = {"--skip-date"}, description = "Don't bother creating a 'created_at' field.")
     private boolean skipDate = false;
 
+    @Parameter(names = {"-c", "--credentials"},
+        description = "Properties file with Twitter OAuth credentials")
+    private String credentialsFile = "./twitter.properties";
+
+    @Parameter(names = {"-h", "-?", "--help"}, description = "Help")
+    private static boolean help = false;
+
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Extractor TWITTER_EXTRACTOR = new Extractor();
     private static final int ID_LENGTH = 16;
     private static final Random R = new Random();
-    private static boolean help = false;
 
     private JComboBox<String> nameCB;
     private JTextArea textArea;
     private JCheckBox useGeoCheckbox;
+    private JCheckBox addPlaceCheckbox;
     private GeoPanel geoPanel;
     private JTextArea jsonTextArea;
     private JTextField idTF;
     private JTextField tsTF;
 
-    private SortedComboBoxModel nameCBModel = new SortedComboBoxModel(new String[]{""});
-    private TweetModel model = new TweetModel();
+    private final SortedComboBoxModel nameCBModel = new SortedComboBoxModel(new String[]{""});
+
+    private final TweetModel model = new TweetModel();
+
+    private final Twitter twitter;
+
+    private volatile boolean placeLookupIsAvailable = true;
+    private final Object placesLookupIsAvailableLock = new Object();
 
     // MAIN
 
@@ -149,6 +176,8 @@ public class SimpleTweetEditorUI extends JPanel {
 
     SimpleTweetEditorUI() throws IOException {
         model.root = JSON.readValue(freshTweetJson(), JsonNode.class); // initialise the model
+
+        twitter = initTwitter();
     }
 
     private String freshTweetJson() {
@@ -330,14 +359,14 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.insets = new Insets(0, 0, 5, 0);
         left.add(useGeoCheckbox, gbc);
 
-        final JCheckBox addPlaceCheckbox = new JCheckBox("Add \"place\" field?");
+        addPlaceCheckbox = new JCheckBox("Add \"place\" field?");
         addPlaceCheckbox.setToolTipText(
             "<html>Uses Twitter's APIs to lookup place information for the<br>" +
-            "selected geo location (requires Twitter credentials).</html>"
+            "selected geo location (requires Twitter credentials and is<br>" +
+            "limited to <font color=red>15 calls per 15 minutes</font>).</html>"
         );
-        Object twitter = null;
         addPlaceCheckbox.setEnabled(twitter != null);
-        addPlaceCheckbox.setSelected(twitter != null);
+        addPlaceCheckbox.setSelected(false);
 
         gbc = new GridBagConstraints();
         gbc.gridy = row;
@@ -419,10 +448,12 @@ public class SimpleTweetEditorUI extends JPanel {
             if (! useGeoCheckbox.isSelected()) {
                 model.set("geo", null);
                 model.set("coordinates", null);
+                addPlaceCheckbox.setEnabled(false);
             } else {
                 final double[] ll = geoPanel.getLatLon();
                 model.set("geo", makeLatLonJsonNode(ll[0], ll[1]));
                 model.set("coordinates", makeLatLonJsonNode(ll[1], ll[0]));
+                addPlaceCheckbox.setEnabled(true);
             }
             updateJsonTextArea();
         });
@@ -566,6 +597,7 @@ public class SimpleTweetEditorUI extends JPanel {
                 geoPanel.setCentre(Double.parseDouble(parts[1]), Double.parseDouble(parts[0]));
                 useGeoCheckbox.setSelected(true); // enable if info present
             }
+            addPlaceCheckbox.setEnabled(! model.get("place").isNull());
             recursivelySetEnabled(geoPanel, useGeoCheckbox.isSelected());
         }
     }
@@ -627,14 +659,31 @@ public class SimpleTweetEditorUI extends JPanel {
 
     private String generateJsonFromModel() {
         try {
-//            if (! model.has("created_at")) {
-//                model.set("created_at", now());
-//            }
-//            if (! model.has("id")) {
-//                final String id = generateID();
-//                model.set("id", BigDecimal.valueOf(Double.parseDouble(id)));
-//                model.set("id_str", id);
-//            }
+            // attempt to include place
+            if (placeLookupIsAvailable && twitter != null && addPlaceCheckbox.isSelected() && useGeoCheckbox.isSelected()) {
+                final double[] latLon = geoPanel.getLatLon();
+                final GeoLocation target = new GeoLocation(latLon[0], latLon[1]);
+                GeoQuery query = new GeoQuery(target);
+                try {
+                    final ResponseList<Place> places = twitter.placesGeo().searchPlaces(query);
+                    if (! places.isEmpty()) {
+                        final Place p = places.get(0); // no apparent order to places
+                        final String jsonForPlace = TwitterObjectFactory.getRawJSON(p);
+                        final JsonNode placeNode = JSON.readValue(jsonForPlace, JsonNode.class);
+                        model.set("place", placeNode);
+                    }
+                    maybeDoze(places.getRateLimitStatus()); // would really like to do this elsewhere, not on UI thread
+                } catch (TwitterException e) {
+                    System.err.println(
+                        "Failed asking Twitter for a 'place' corresponding to this location:\n" +
+                        e.getErrorMessage() + " [" + e.getErrorCode() + "]"
+                    );
+                    e.printStackTrace();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
             return JSON.writeValueAsString(model.root);
 
         } catch (JsonProcessingException e1) {
@@ -682,6 +731,106 @@ public class SimpleTweetEditorUI extends JPanel {
                 }
             });
         }
+    }
+
+    private Twitter initTwitter() throws IOException {
+        if (Files.notExists(Paths.get(credentialsFile))) {
+            return null;
+        } else {
+            System.out.println("Loading Twitter credentials...");
+        }
+
+        final Configuration twitterConfig = makeTwitterConfig(credentialsFile, true);
+        final Twitter instance = new TwitterFactory(twitterConfig).getInstance();
+        instance.addRateLimitStatusListener(new RateLimitStatusListener() {
+            @Override
+            public void onRateLimitStatus(RateLimitStatusEvent event) {
+                maybeDoze(event.getRateLimitStatus());
+            }
+
+            @Override
+            public void onRateLimitReached(RateLimitStatusEvent event) {
+                maybeDoze(event.getRateLimitStatus());
+            }
+        });
+        return instance;
+    }
+
+    /**
+     * If the provided {@link RateLimitStatus} indicates that we are about to exceed the rate
+     * limit, in terms of number of calls or time window, then sleep for the rest of the period.
+     *
+     * @param status The current rate limit status of our calls to Twitter
+     */
+    private void maybeDoze(final RateLimitStatus status) {
+        if (status == null) { return; }
+
+        final int secondsUntilReset = status.getSecondsUntilReset();
+        final int callsRemaining = status.getRemaining();
+        placeLookupIsAvailable = false;
+        new Thread(() -> { // off the UI thread
+            if (secondsUntilReset < 10 || callsRemaining < 10) {
+                final int untilReset = status.getSecondsUntilReset() + 5;
+                System.out.printf("Rate limit reached. Waiting %d seconds starting at %s...\n", untilReset, new Date());
+                try {
+                    Thread.sleep(untilReset * 1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                System.out.println("Resuming...");
+            }
+            synchronized (placesLookupIsAvailableLock) {
+                placeLookupIsAvailable = true;
+            }
+        }).start();
+    }
+
+    /**
+     * Builds the {@link Configuration} object with which to connect to Twitter, including
+     * credentials and proxy information if it's specified.
+     *
+     * @return a Twitter4j {@link Configuration} object
+     * @throws IOException if there's an error loading the application's {@link #credentialsFile}.
+     */
+    private static Configuration makeTwitterConfig(
+        final String credentialsFile,
+        final boolean debug
+    ) throws IOException {
+        // TODO find a better name than credentials, given it might contain proxy info
+        final Properties credentials = loadCredentials(credentialsFile);
+
+        final ConfigurationBuilder conf = new ConfigurationBuilder();
+        conf.setTweetModeExtended(true);
+        conf.setJSONStoreEnabled(true)
+            .setDebugEnabled(debug)
+            .setOAuthConsumerKey(credentials.getProperty("oauth.consumerKey"))
+            .setOAuthConsumerSecret(credentials.getProperty("oauth.consumerSecret"))
+            .setOAuthAccessToken(credentials.getProperty("oauth.accessToken"))
+            .setOAuthAccessTokenSecret(credentials.getProperty("oauth.accessTokenSecret"));
+
+        final Properties proxies = loadProxyProperties();
+        if (proxies.containsKey("http.proxyHost")) {
+            conf.setHttpProxyHost(proxies.getProperty("http.proxyHost"))
+                .setHttpProxyPort(Integer.parseInt(proxies.getProperty("http.proxyPort")))
+                .setHttpProxyUser(proxies.getProperty("http.proxyUser"))
+                .setHttpProxyPassword(proxies.getProperty("http.proxyPassword"));
+        }
+
+        return conf.build();
+    }
+
+    /**
+     * Loads the given {@code credentialsFile} from disk.
+     *
+     * @param credentialsFile the properties file with the Twitter credentials in it
+     * @return A {@link Properties} map with the contents of credentialsFile
+     * @throws IOException if there's a problem reading the credentialsFile.
+     */
+    private static Properties loadCredentials(final String credentialsFile)
+        throws IOException {
+        final Properties properties = new Properties();
+        properties.load(Files.newBufferedReader(Paths.get(credentialsFile)));
+        return properties;
     }
 
     /**
