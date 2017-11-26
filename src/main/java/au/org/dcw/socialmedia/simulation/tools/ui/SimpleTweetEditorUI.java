@@ -377,7 +377,7 @@ public class SimpleTweetEditorUI extends JPanel {
 
         // Row 6: geo panel
         row++;
-        double[] latLon = lookupLatLon();
+        final double[] latLon = lookupLatLon();
         geoPanel = new GeoPanel(latLon[0], latLon[1]);
 
         gbc = new GridBagConstraints();
