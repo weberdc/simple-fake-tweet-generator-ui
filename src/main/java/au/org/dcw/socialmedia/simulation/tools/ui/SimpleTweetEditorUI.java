@@ -245,9 +245,12 @@ public class SimpleTweetEditorUI extends JPanel {
         textArea = new JTextArea(4, 30);
         textArea.setLineWrap(true);
         textArea.setWrapStyleWord(true);
-        Object text = model.get("text");
+        Object text = model.get("full_text");
         if (text == null || text.toString().length() == 0) {
-            text = model.get("full_text");
+            text = model.get("extended_tweet.full_text");
+        }
+        if (text == null || text.toString().length() == 0) {
+            text = model.get("text");
         }
         if (text!= null && text.toString().equals("\"\"")) {
             // rescue us from the dreaded "" bug (must be Jackson)
