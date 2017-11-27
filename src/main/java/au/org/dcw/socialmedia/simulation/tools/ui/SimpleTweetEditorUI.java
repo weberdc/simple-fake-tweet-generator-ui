@@ -137,7 +137,7 @@ public class SimpleTweetEditorUI extends JPanel {
     private GeoPanel geoPanel;
     private JTextArea jsonTextArea;
     private JTextField idTF;
-    private JTextField tsTF;
+    private JSpinner tsPicker;
 
     private final SortedComboBoxModel nameCBModel = new SortedComboBoxModel(new String[]{""});
 
@@ -337,7 +337,7 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.insets = new Insets(0, 0, 5, 5);
         left.add(tsButton, gbc);
 
-        final JSpinner tsPicker = new JSpinner(new SpinnerDateModel());
+        tsPicker = new JSpinner(new SpinnerDateModel());
         JSpinner.DateEditor timeEditor = new JSpinner.DateEditor(tsPicker, "EEE MMM dd HH:mm:ss Z yyyy");
         tsPicker.setEditor(timeEditor);
         tsPicker.setValue(parseCreatedAt());
@@ -596,7 +596,7 @@ public class SimpleTweetEditorUI extends JPanel {
                 textArea.setText(model.get("text").asText(""));
             }
             idTF.setText(model.get("id_str").asText(""));
-            tsTF.setText(model.get("created_at").asText(now()));
+            tsPicker.setValue(parseCreatedAt());
             final String coords = model.get("coordinates.coordinates") == null
                 ? ""
                 : model.get("coordinates.coordinates").asText();
