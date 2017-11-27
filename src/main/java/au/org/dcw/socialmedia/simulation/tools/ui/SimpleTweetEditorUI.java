@@ -57,10 +57,12 @@ import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSpinner;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListCellRenderer;
+import javax.swing.SpinnerDateModel;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 import javax.swing.event.DocumentEvent;
@@ -86,6 +88,7 @@ import java.io.Reader;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -127,7 +130,7 @@ public class SimpleTweetEditorUI extends JPanel {
     private static final int ID_LENGTH = 16;
     private static final Random R = new Random();
 
-    private JComboBox<String> nameCB;
+    private JComboBox<String> namePicker;
     private JTextArea textArea;
     private JCheckBox useGeoCheckbox;
     private JCheckBox addPlaceCheckbox;
@@ -199,7 +202,6 @@ public class SimpleTweetEditorUI extends JPanel {
         System.out.println("UI built");
 
         // Display the window
-//        frame.pack();
         frame.setSize(700, 600);
         System.out.println("Size set");
         frame.setVisible(true);
@@ -239,17 +241,17 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.insets = new Insets(0, 0, 5, 5);
         left.add(nameButton, gbc);
 
-        nameCB = new JComboBox<>(nameCBModel);
-        nameCB.setEditable(true);
+        namePicker = new JComboBox<>(nameCBModel);
+        namePicker.setEditable(true);
         final Icon removeIcon = new ImageIcon(this.getClass().getResource("/icons/Remove-16.png"));
-        nameCB.setRenderer(new ButtonComboRenderer(removeIcon, nameCB));
+        namePicker.setRenderer(new ButtonComboRenderer(removeIcon, namePicker));
         final Object screenNameObj = model.get("user.screen_name");
         final String sn = screenNameObj != null ? screenNameObj.toString() : "";
         if (sn.equals("\"\"")) { // rescue us from the terrible "" bug!
             model.set("user.screen_name", "");
         } else {
-            nameCB.addItem(sn);
-            nameCB.setSelectedItem(sn);
+            namePicker.addItem(sn);
+            namePicker.setSelectedItem(sn);
         }
 
         gbc = new GridBagConstraints();
@@ -258,7 +260,7 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.weightx = 1.0;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(0, 0, 5, 0);
-        left.add(nameCB, gbc);
+        left.add(namePicker, gbc);
 
         // Row 2: text field
         row++;
@@ -335,8 +337,11 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.insets = new Insets(0, 0, 5, 5);
         left.add(tsButton, gbc);
 
-        tsTF = new JTextField();
-        tsTF.setText(model.get("created_at").asText(now()));
+        final JSpinner tsPicker = new JSpinner(new SpinnerDateModel());
+        JSpinner.DateEditor timeEditor = new JSpinner.DateEditor(tsPicker, "EEE MMM dd HH:mm:ss Z yyyy");
+        tsPicker.setEditor(timeEditor);
+        tsPicker.setValue(parseCreatedAt());
+
 
         gbc = new GridBagConstraints();
         gbc.gridy = row;
@@ -344,7 +349,7 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.weightx = 1.0;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(0, 0, 5, 0);
-        left.add(tsTF, gbc);
+        left.add(tsPicker, gbc);
 
 
         // Row 5: use geo checkbox
@@ -457,16 +462,16 @@ public class SimpleTweetEditorUI extends JPanel {
             }
             updateJsonTextArea();
         });
-        nameCB.addActionListener(e -> {
-            final String newName = (String) nameCB.getSelectedItem();
-            nameCB.addItem(newName);
+        namePicker.addActionListener(e -> {
+            final String newName = (String) namePicker.getSelectedItem();
+            namePicker.addItem(newName);
             model.set("user.screen_name", newName);
             updateJsonTextArea();
         });
         nameButton.addActionListener(e -> {
             final String newName = generateName(nameCBModel.getElements());
-            nameCB.addItem(newName);
-            nameCB.setSelectedItem(newName); // will trigger the ActionListener above
+            namePicker.addItem(newName);
+            namePicker.setSelectedItem(newName); // will trigger the ActionListener above
         });
         textArea.getDocument().addDocumentListener(newUpdateOnChangeListener(() -> {
             updateModelAndUIWithNewText(textArea.getText());
@@ -481,14 +486,16 @@ public class SimpleTweetEditorUI extends JPanel {
                 model.set("id_str", newID);
                 model.set("id", BigDecimal.valueOf(Long.parseLong(newID)));
                 idTF.setText(newID);
+                updateJsonTextArea();
             }
         });
         tsButton.addActionListener(e -> {
             String now = now();
             model.set("created_at", now);
-            tsTF.setText(now);
+            tsPicker.setValue(parseCreatedAt());
+            updateJsonTextArea();
         });
-        tsTF.setInputVerifier(new InputVerifier() {
+        tsPicker.setInputVerifier(new InputVerifier() {
             @Override
             public boolean verify(JComponent input) {
                 final String newTS = ((JTextField) input).getText();
@@ -551,6 +558,11 @@ public class SimpleTweetEditorUI extends JPanel {
         });
     }
 
+    private Date parseCreatedAt() {
+        return Date.from(Instant.from(TWITTER_TIMESTAMP_FORMAT.parse(model.get("created_at").asText(now()))));
+//        return Date.from(ZonedDateTime.from(TWITTER_TIMESTAMP_FORMAT.parse(model.get("created_at").asText(now()))).toInstant());
+    }
+
     private void updateModelAndUIWithNewText(final String newText) {
         model.set("text", newText);
         model.set("truncated", newText.length() > TWITTER_OLD_MAX_LENGTH);
@@ -574,8 +586,8 @@ public class SimpleTweetEditorUI extends JPanel {
         if (hopefullyJSON != null) {
             updateJsonTextArea();
             final String sn = model.get("user.screen_name").asText("");
-            nameCB.addItem(sn);
-            nameCB.setSelectedItem(sn);
+            namePicker.addItem(sn);
+            namePicker.setSelectedItem(sn);
             textArea.setText(model.get("full_text").asText("")); // get the full text first
             if (textArea.getText().equals("")) {
                 textArea.setText(model.get("extended_tweet.full_text").asText(""));

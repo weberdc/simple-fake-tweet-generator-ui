@@ -14,7 +14,6 @@ mainClassName = 'au.org.dcw.socialmedia.simulation.tools.ui.SimpleTweetEditorUI'
 
 repositories {
     jcenter()
-    mavenCentral()
 }
 
 dependencies {
