@@ -38,6 +38,7 @@ mode.
  + [Google Guava](https://github.com/google/guava) (Apache 2.0 licence) 
  + [FasterXML](http://wiki.fasterxml.com/JacksonHome) (Apache 2.0 licence)
  + [JXMapViewer2](https://github.com/msteiger/jxmapviewer2) (LGPLv3)
+ + [jcommander](http://jcommander.org) (Apache 2.0 licence)
 
 Built with [Gradle 4.3](http://gradle.org), included via the wrapper.
 
