@@ -403,6 +403,7 @@ public class SimpleTweetEditorUI extends JPanel {
             "limited to <font color=red>15 calls per 15 minutes</font>).</html>"
         );
         addPlaceCheckbox.setEnabled(twitter != null);
+        addPlaceCheckbox.setVisible(twitter != null); // don't even show it
         addPlaceCheckbox.setSelected(false);
 
         gbc = new GridBagConstraints();
