@@ -129,6 +129,9 @@ public class SimpleTweetEditorUI extends JPanel {
     @Parameter(names = {"-h", "-?", "--help"}, description = "Help")
     private static boolean help = false;
 
+    @Parameter(names = {"-v", "--verbose"}, description = "Verbose logging mode")
+    private static boolean verbose = false;
+
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Extractor TWITTER_EXTRACTOR = new Extractor();
     private static final int ID_LENGTH = 16;
@@ -543,6 +546,17 @@ public class SimpleTweetEditorUI extends JPanel {
         });
         mediaUrlTF.getDocument().addDocumentListener(newUpdateOnChangeListener(()-> {
             final String mediaUrl = mediaUrlTF.getText();
+
+            // deal with situation when the first media entity doesn't exist,
+            // which happens if you paste in a pre-existing tweet
+            if (mediaUrl.trim().isEmpty()) {
+                // remove entity but keep the list
+                model.set("entities.media", JsonNodeFactory.instance.arrayNode());
+                return;
+            } else {
+                ensureMediaEntityExists();
+            }
+
             model.set("entities.media.[0].media_url_https", mediaUrl);
             model.set("entities.media.[0].url", mediaUrl);
             model.set("entities.media.[0].display_url", mediaUrl);
@@ -650,6 +664,17 @@ public class SimpleTweetEditorUI extends JPanel {
                 );
             }
         });
+    }
+
+    private void ensureMediaEntityExists() {
+        if (! model.has("entities.media")) { // add media entity list if it's not there
+            final ArrayNode mediaList = JsonNodeFactory.instance.arrayNode();
+            mediaList.add(JsonNodeFactory.instance.objectNode());
+            model.set("entities.media", mediaList);
+        } else if (! model.has("entities.media.[0]")) { // the list is there, but it's empty
+            final ArrayNode mediaList = (ArrayNode) model.get("entities.media");
+            mediaList.add(JsonNodeFactory.instance.objectNode());
+        }
     }
 
     private JsonNode buildSizeJsonNode(String mediaUrl) {
@@ -1115,6 +1140,7 @@ public class SimpleTweetEditorUI extends JPanel {
                         setNested(node.get(index), tail, value);
                     } else {
                         System.err.println("Could not find index: " + index);
+                        if (verbose) Thread.dumpStack();
                     }
                 } else if (node.has(head)) {
                     if (tail.startsWith("[")) {
@@ -1134,6 +1160,7 @@ public class SimpleTweetEditorUI extends JPanel {
                         obj = (ObjectNode) node.get(index); // set node to the indexed element
                     } else {
                         System.err.println("Could not find index: " + index);
+                        if (verbose) Thread.dumpStack();
                     }
                 } else {
                     obj = (ObjectNode) node;
@@ -1168,16 +1195,39 @@ public class SimpleTweetEditorUI extends JPanel {
         }
 
         public boolean has(final String path) {
-            return has(root, path);
+            return hasNested(root, path);
         }
 
-        public boolean has(final JsonNode obj, final String path) {
+        public boolean hasNested(final JsonNode obj, final String path) {
             if (path.contains(".")) {
                 final String head = path.substring(0, path.indexOf('.'));
                 final String tail = path.substring(path.indexOf('.') + 1);
-                return obj.has(head) && has(obj.get(head), tail);
+                if (head.startsWith("[")) {
+                    final int index = Integer.parseInt(path.substring(1, path.length() - 1));
+                    if (! (obj instanceof ArrayNode)) {
+                        return false;
+                    }
+                    final ArrayNode array = (ArrayNode) obj;
+                    if (array.has(index)) {
+                        return hasNested(array.get(index), tail);
+                    } else {
+                        System.err.println("Could not find index: " + index);
+                        if (verbose) Thread.dumpStack();
+                        return false;
+                    }
+                } else {
+                    return obj.has(head) && hasNested(obj.get(head), tail);
+                }
             }
-            return obj.has(path);
+            if (path.startsWith("[")) {
+                final int index = Integer.parseInt(path.substring(1, path.length() - 1));
+                if (! (obj instanceof ArrayNode)) {
+                    return false;
+                }
+                return obj.has(index);
+            } else {
+                return obj.has(path);
+            }
         }
     }
 
@@ -1212,7 +1262,7 @@ public class SimpleTweetEditorUI extends JPanel {
             int size = getSize();
             //  Determine where to insert element to keep model in sorted order
             for (index = 0; index < size; index++) {
-                Comparable c = getElementAt(index);
+                Comparable<String> c = getElementAt(index);
                 if (c.compareTo(element) > 0) {
                     break;
                 }
@@ -1246,7 +1296,6 @@ public class SimpleTweetEditorUI extends JPanel {
                 @Override
                 public void mousePressed(MouseEvent e) {
                     if (button.getX() < e.getX()) {
-//                        System.out.println("button contains the click remove the item");
                         combo.removeItem(label.getText());
                     }
                 }
@@ -1284,5 +1333,4 @@ public class SimpleTweetEditorUI extends JPanel {
             return panel;
         }
     }
-
 }
