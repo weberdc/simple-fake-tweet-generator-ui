@@ -71,7 +71,6 @@ import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
@@ -89,6 +88,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 import java.math.BigDecimal;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -113,6 +113,12 @@ public class SimpleTweetEditorUI extends JPanel {
     private static final DateTimeFormatter TWITTER_TIMESTAMP_FORMAT =
         DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss Z yyyy", Locale.ENGLISH);
     private static final int TWITTER_OLD_MAX_LENGTH = 140;
+
+    // standard default values for attached media
+    private static final int DEFAULT_THUMB_HEIGHT = 100;
+    private static final int DEFAULT_THUMB_WIDTH = 100;
+    private static final int DEFAULT_MEDIA_WIDTH = 226;
+    private static final int DEFAULT_MEDIA_HEIGHT = 238;
 
     private final String[] NAME_PARTS = {
         "salted", "tables", "benign", "sawfly", "sweaty", "noggin",
@@ -576,13 +582,24 @@ public class SimpleTweetEditorUI extends JPanel {
             model.set("entities.media.[0].source_status_id", null);
             model.set("entities.media.[0].source_status_id_str", null);
 
-            final Cursor originalCursor = getCursor();
-            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-            model.set("entities.media.[0].sizes", buildSizeJsonNode(mediaUrl));
-            setCursor(originalCursor);
+            setAttachedMediaSize(mediaUrl);
 
             updateJsonTextArea();
         }));
+        mediaUrlTF.setInputVerifier(new InputVerifier() {
+            @Override
+            public boolean verify(JComponent input) {
+                final String hopefullyAnUrl = ((JTextField) input).getText();
+                try {
+                    new URL(hopefullyAnUrl);
+                    return true;
+                } catch (MalformedURLException e) {
+                    System.err.println("Can't parse URL: " + e.getMessage());
+                    return false;
+                }
+            }
+        });
+
         idButton.addActionListener(e -> {
             if (JOptionPane.showConfirmDialog(
                 SimpleTweetEditorUI.this,
@@ -677,21 +694,44 @@ public class SimpleTweetEditorUI extends JPanel {
         }
     }
 
-    private JsonNode buildSizeJsonNode(String mediaUrl) {
-        // standard default values
-        int thumbHeight = 100;
-        int thumbWidth = 100;
-        int w = 226;
-        int h = 238;
-        try {
-            final BufferedImage image = ImageIO.read(new URL(mediaUrl));
-            h = image.getHeight();
-            w = image.getWidth();
-            thumbHeight = 150;
-            thumbWidth = (int) Math.floor(thumbHeight / (1.0 * h) * w);
-        } catch (IOException e) {
-            System.err.println("Media URL (" + mediaUrl + ") is not a valid URL: " + e.getMessage());
-        }
+    private void setAttachedMediaSize(final String mediaUrl) {
+
+        // use the defaults until others are available
+        System.out.println("Using default media size information for the attached photo");
+        model.set(
+            "entities.media.[0].sizes",
+            buildJsonNodeForMediaSize(
+                DEFAULT_THUMB_HEIGHT, DEFAULT_THUMB_WIDTH, DEFAULT_MEDIA_HEIGHT, DEFAULT_MEDIA_WIDTH
+            )
+        );
+
+        // get the real size info in the background
+        new Thread(() -> {
+            try {
+                final BufferedImage image = ImageIO.read(new URL(mediaUrl));
+                final int fullH = image.getHeight();
+                final int fullW = image.getWidth();
+                final int miniH = DEFAULT_THUMB_HEIGHT;
+                final int miniW = (int) Math.floor(miniH / (1.0 * fullH) * fullW);
+
+                SwingUtilities.invokeLater(() -> {
+                    ensureMediaEntityExists();
+                    model.set("entities.media.[0].sizes", buildJsonNodeForMediaSize(miniH, miniW, fullH, fullW));
+                    updateJsonTextArea();
+                    System.out.println("media size information updated in background");
+                });
+            } catch (IOException e) {
+                System.err.println("Media URL (" + mediaUrl + ") is not a valid URL: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private JsonNode buildJsonNodeForMediaSize(
+        final int thumbHeight,
+        final int thumbWidth,
+        final int fullHeight,
+        final int fullWidth
+    ) {
         try {
             return JSON.readValue("{\n" +
                 "  \"thumb\": {\n" +
@@ -700,19 +740,19 @@ public class SimpleTweetEditorUI extends JPanel {
                 "    \"w\": " + thumbWidth + "\n" +
                 "  },\n" +
                 "  \"large\": {\n" +
-                "    \"h\": " + h + ",\n" +
+                "    \"h\": " + fullHeight + ",\n" +
                 "    \"resize\": \"fit\",\n" +
-                "    \"w\": " + w + "\n" +
+                "    \"w\": " + fullWidth + "\n" +
                 "  },\n" +
                 "  \"medium\": {\n" +
-                "    \"h\": " + h + ",\n" +
+                "    \"h\": " + fullHeight + ",\n" +
                 "    \"resize\": \"fit\",\n" +
-                "    \"w\": " + w + "\n" +
+                "    \"w\": " + fullWidth + "\n" +
                 "  },\n" +
                 "  \"small\": {\n" +
-                "    \"h\": " + h + ",\n" +
+                "    \"h\": " + fullHeight + ",\n" +
                 "    \"resize\": \"fit\",\n" +
-                "    \"w\": " + w + "\n" +
+                "    \"w\": " + fullWidth + "\n" +
                 "  }\n" +
                 "}", JsonNode.class);
         } catch (IOException e) {
