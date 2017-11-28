@@ -82,8 +82,6 @@ import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.UnsupportedFlavorException;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
@@ -98,7 +96,6 @@ import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
@@ -146,6 +143,7 @@ public class SimpleTweetEditorUI extends JPanel {
     private JTextField idTF;
     private JSpinner tsPicker;
     private JTextField mediaUrlTF;
+    private JCheckBox useCurrentTS;
 
     private final SortedComboBoxModel nameCBModel = new SortedComboBoxModel(new String[]{""});
 
@@ -358,7 +356,21 @@ public class SimpleTweetEditorUI extends JPanel {
         left.add(idTF, gbc);
 
 
-        // Row 5: Timestamp
+        // Row 5: Enable/Disable timestamp
+        row++;
+        useCurrentTS = new JCheckBox("Use current time");
+        useCurrentTS.setToolTipText("Select this to set created_at to 'now' when you generate the JSON.");
+        useCurrentTS.setSelected(true);
+
+        gbc = new GridBagConstraints();
+        gbc.gridy = row;
+        gbc.gridwidth = 2;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(0, 0, 5, 0);
+        left.add(useCurrentTS, gbc);
+
+
+        // Row 6: Timestamp
         row++;
         final JButton tsButton = new JButton("Timestamp");
         tsButton.setToolTipText("Press to re-generate timestamp to now");
@@ -373,7 +385,7 @@ public class SimpleTweetEditorUI extends JPanel {
         JSpinner.DateEditor timeEditor = new JSpinner.DateEditor(tsPicker, "EEE MMM dd HH:mm:ss Z yyyy");
         tsPicker.setEditor(timeEditor);
         tsPicker.setValue(parseCreatedAt());
-
+        tsPicker.setEnabled(! useCurrentTS.isSelected());
 
         gbc = new GridBagConstraints();
         gbc.gridy = row;
@@ -384,7 +396,7 @@ public class SimpleTweetEditorUI extends JPanel {
         left.add(tsPicker, gbc);
 
 
-        // Row 6: use geo checkbox
+        // Row 7: use geo checkbox
         row++;
         useGeoCheckbox = new JCheckBox("Use geo?");
         useGeoCheckbox.setSelected(model.get("coordinates") != null);
@@ -413,7 +425,8 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.insets = new Insets(0, 0, 5, 0);
         left.add(addPlaceCheckbox, gbc);
 
-        // Row 7: geo panel
+
+        // Row 8: geo panel
         row++;
         final double[] latLon = lookupLatLon();
         geoPanel = new GeoPanel(latLon[0], latLon[1]);
@@ -427,7 +440,8 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.insets = new Insets(0, 0, 5, 0);
         left.add(geoPanel, gbc);
 
-        // Row 8: generate button
+
+        // Row 9: generate button
         row++;
         final JButton generateJsonButton = new JButton("Push JSON to global clipboard");
 
@@ -438,7 +452,8 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.insets = new Insets(0, 0, 5, 0);
         left.add(generateJsonButton, gbc);
 
-        // Row 9: new tweet button
+
+        // Row 10: new tweet button
         row++;
         final JButton newButton = new JButton("New Tweet");
         newButton.setToolTipText("Refresh the editor for a new Tweet");
@@ -567,6 +582,7 @@ public class SimpleTweetEditorUI extends JPanel {
                 updateJsonTextArea();
             }
         });
+        useCurrentTS.addActionListener(e -> tsPicker.setEnabled(! useCurrentTS.isSelected()));
         tsButton.addActionListener(e -> {
             String now = now();
             model.set("created_at", now);
@@ -755,7 +771,7 @@ public class SimpleTweetEditorUI extends JPanel {
         };
     }
 
-    private JsonNode makeLatLonJsonNode(double first, double second) {
+    private JsonNode makeLatLonJsonNode(final double first, final double second) {
         try {
             final String jsonContent = "{\"coordinates\":[" + first + "," + second + "],\"type\":\"Point\"}";
             return JSON.readValue(jsonContent, JsonNode.class);
@@ -822,6 +838,10 @@ public class SimpleTweetEditorUI extends JPanel {
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
+            }
+
+            if (useCurrentTS.isSelected()) {
+                model.set("created_at", TWITTER_TIMESTAMP_FORMAT.format(ZonedDateTime.now()));
             }
 
             return JSON.writeValueAsString(model.root);
