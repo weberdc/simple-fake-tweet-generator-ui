@@ -42,6 +42,7 @@ import twitter4j.TwitterObjectFactory;
 import twitter4j.conf.Configuration;
 import twitter4j.conf.ConfigurationBuilder;
 
+import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.Icon;
@@ -70,6 +71,7 @@ import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
@@ -80,18 +82,23 @@ import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.UnsupportedFlavorException;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 import java.math.BigDecimal;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
@@ -138,6 +145,7 @@ public class SimpleTweetEditorUI extends JPanel {
     private JTextArea jsonTextArea;
     private JTextField idTF;
     private JSpinner tsPicker;
+    private JTextField mediaUrlTF;
 
     private final SortedComboBoxModel nameCBModel = new SortedComboBoxModel(new String[]{""});
 
@@ -188,7 +196,8 @@ public class SimpleTweetEditorUI extends JPanel {
         final String createdAt = now();
         return "{\"coordinates\":{\"coordinates\":[138.604,-34.918],\"type\":\"Point\"}," +
             "\"created_at\":\""+ createdAt + "\",\"full_text\":\"\",\"id\":" + id +
-            ",\"id_str\":\"" + id + "\",\"text\":\"\",\"user\":{\"screen_name\":\"\"}}";
+            ",\"id_str\":\"" + id + "\",\"text\":\"\",\"user\":{\"screen_name\":\"\"}," +
+            "\"entities\":{\"media\":[{\"media_url_https\":\"\"}]}}";
     }
 
     private void run() {
@@ -303,7 +312,30 @@ public class SimpleTweetEditorUI extends JPanel {
         left.add(scrollPane, gbc);
 
 
-        // Row 3: ID
+        // Row 3: Image URL
+        row++;
+        final JButton mediaUrlButton = new JButton("Photo URL");
+        mediaUrlButton.setToolTipText("Copy a URL from elsewhere and hit this button to paste it in the photo URL field.");
+
+        gbc = new GridBagConstraints();
+        gbc.gridy = row;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(0, 0, 5, 5);
+        left.add(mediaUrlButton, gbc);
+
+        mediaUrlTF = new JTextField();
+        mediaUrlTF.setText(model.get("entities.media.[0].media_url_https").asText(""));
+
+        gbc = new GridBagConstraints();
+        gbc.gridy = row;
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(0, 0, 5, 0);
+        left.add(mediaUrlTF, gbc);
+
+
+        // Row 4: ID
         row++;
         final JButton idButton = new JButton("ID");
         idButton.setToolTipText("Press to re-generate ID");
@@ -326,7 +358,7 @@ public class SimpleTweetEditorUI extends JPanel {
         left.add(idTF, gbc);
 
 
-        // Row 4: Timestamp
+        // Row 5: Timestamp
         row++;
         final JButton tsButton = new JButton("Timestamp");
         tsButton.setToolTipText("Press to re-generate timestamp to now");
@@ -352,7 +384,7 @@ public class SimpleTweetEditorUI extends JPanel {
         left.add(tsPicker, gbc);
 
 
-        // Row 5: use geo checkbox
+        // Row 6: use geo checkbox
         row++;
         useGeoCheckbox = new JCheckBox("Use geo?");
         useGeoCheckbox.setSelected(model.get("coordinates") != null);
@@ -380,7 +412,7 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.insets = new Insets(0, 0, 5, 0);
         left.add(addPlaceCheckbox, gbc);
 
-        // Row 6: geo panel
+        // Row 7: geo panel
         row++;
         final double[] latLon = lookupLatLon();
         geoPanel = new GeoPanel(latLon[0], latLon[1]);
@@ -394,7 +426,7 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.insets = new Insets(0, 0, 5, 0);
         left.add(geoPanel, gbc);
 
-        // Row 7: generate button
+        // Row 8: generate button
         row++;
         final JButton generateJsonButton = new JButton("Push JSON to global clipboard");
 
@@ -405,7 +437,7 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.insets = new Insets(0, 0, 5, 0);
         left.add(generateJsonButton, gbc);
 
-        // Row 8: new tweet button
+        // Row 9: new tweet button
         row++;
         final JButton newButton = new JButton("New Tweet");
         newButton.setToolTipText("Refresh the editor for a new Tweet");
@@ -475,6 +507,51 @@ public class SimpleTweetEditorUI extends JPanel {
         });
         textArea.getDocument().addDocumentListener(newUpdateOnChangeListener(() -> {
             updateModelAndUIWithNewText(textArea.getText());
+        }));
+        mediaUrlButton.addActionListener(e -> {
+            final Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+            try {
+                // grab the text from the clipboard, safely
+                final String copiedUrl = (String) clipboard.getData(DataFlavor.stringFlavor);
+                mediaUrlTF.setText(copiedUrl);
+            } catch (UnsupportedFlavorException | IOException ex) {
+                System.err.println("No URL on the clipboard: " + ex.getMessage());
+            }
+        });
+        mediaUrlTF.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                mediaUrlTF.setSelectionStart(0);
+                mediaUrlTF.setSelectionEnd(mediaUrlTF.getText().length());
+            }
+        });
+        mediaUrlTF.getDocument().addDocumentListener(newUpdateOnChangeListener(()-> {
+            final String mediaUrl = mediaUrlTF.getText();
+            model.set("entities.media.[0].media_url_https", mediaUrl);
+            model.set("entities.media.[0].url", mediaUrl);
+            model.set("entities.media.[0].display_url", mediaUrl);
+            model.set("entities.media.[0].extended_url", mediaUrl);
+            model.set("entities.media.[0].type", "photo");
+            final String newID = generateID();
+            model.set("entities.media.[0].id", BigDecimal.valueOf(Long.parseLong(newID)));
+            model.set("entities.media.[0].id_str", newID);
+            final String msg = textArea.getText();
+            final boolean trailingSpace = ! msg.isEmpty() && msg.charAt(msg.length() - 1) == ' ';
+            if (! msg.contains(mediaUrl)) {
+                textArea.setText(msg + (trailingSpace ? "" : " ") + mediaUrl);
+            }
+            final int indexOfUrl = textArea.getText().indexOf(mediaUrl);
+            final int[] indices = new int[]{indexOfUrl, indexOfUrl + mediaUrl.length()};
+            model.set("entities.media.[0].indices", indices);
+            model.set("entities.media.[0].source_status_id", null);
+            model.set("entities.media.[0].source_status_id_str", null);
+
+            final Cursor originalCursor = getCursor();
+            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+            model.set("entities.media.[0].sizes", buildSizeJsonNode(mediaUrl));
+            setCursor(originalCursor);
+
+            updateJsonTextArea();
         }));
         idButton.addActionListener(e -> {
             if (JOptionPane.showConfirmDialog(
@@ -558,9 +635,52 @@ public class SimpleTweetEditorUI extends JPanel {
         });
     }
 
+    private JsonNode buildSizeJsonNode(String mediaUrl) {
+        // standard default values
+        int thumbHeight = 100;
+        int thumbWidth = 100;
+        int w = 226;
+        int h = 238;
+        try {
+            final BufferedImage image = ImageIO.read(new URL(mediaUrl));
+            h = image.getHeight();
+            w = image.getWidth();
+            thumbHeight = 150;
+            thumbWidth = (int) Math.floor(thumbHeight / (1.0 * h) * w);
+        } catch (IOException e) {
+            System.err.println("Media URL (" + mediaUrl + ") is not a valid URL: " + e.getMessage());
+        }
+        try {
+            return JSON.readValue("{\n" +
+                "  \"thumb\": {\n" +
+                "    \"h\": " + thumbHeight + ",\n" +
+                "    \"resize\": \"crop\",\n" +
+                "    \"w\": " + thumbWidth + "\n" +
+                "  },\n" +
+                "  \"large\": {\n" +
+                "    \"h\": " + h + ",\n" +
+                "    \"resize\": \"fit\",\n" +
+                "    \"w\": " + w + "\n" +
+                "  },\n" +
+                "  \"medium\": {\n" +
+                "    \"h\": " + h + ",\n" +
+                "    \"resize\": \"fit\",\n" +
+                "    \"w\": " + w + "\n" +
+                "  },\n" +
+                "  \"small\": {\n" +
+                "    \"h\": " + h + ",\n" +
+                "    \"resize\": \"fit\",\n" +
+                "    \"w\": " + w + "\n" +
+                "  }\n" +
+                "}", JsonNode.class);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return JsonNodeFactory.instance.objectNode();
+        }
+    }
+
     private Date parseCreatedAt() {
         return Date.from(Instant.from(TWITTER_TIMESTAMP_FORMAT.parse(model.get("created_at").asText(now()))));
-//        return Date.from(ZonedDateTime.from(TWITTER_TIMESTAMP_FORMAT.parse(model.get("created_at").asText(now()))).toInstant());
     }
 
     private void updateModelAndUIWithNewText(final String newText) {
@@ -568,6 +688,12 @@ public class SimpleTweetEditorUI extends JPanel {
         model.set("truncated", newText.length() > TWITTER_OLD_MAX_LENGTH);
         model.set("full_text", newText);
         model.set("entities", extractEntitiesAsJsonNodeTree(newText, model.get("entities.media")));
+        if (! mediaUrlTF.getText().isEmpty()) {
+            final String mediaUrl = mediaUrlTF.getText();
+            final int indexOfUrl = textArea.getText().indexOf(mediaUrl);
+            final int[] indices = new int[]{indexOfUrl, indexOfUrl + mediaUrl.length()};
+            model.set("entities.media.[0].indices", indices);
+        }
         updateJsonTextArea();
     }
 
@@ -595,6 +721,7 @@ public class SimpleTweetEditorUI extends JPanel {
             if (textArea.getText().equals("")) {
                 textArea.setText(model.get("text").asText(""));
             }
+            mediaUrlTF.setText(model.get("entities.media.[0].media_url_https").asText(""));
             idTF.setText(model.get("id_str").asText(""));
             tsPicker.setValue(parseCreatedAt());
             final String coords = model.get("coordinates.coordinates") == null
@@ -933,6 +1060,15 @@ public class SimpleTweetEditorUI extends JPanel {
             if (path.contains(".")) {
                 final String head = path.substring(0, path.indexOf('.'));
                 final String tail = path.substring(path.indexOf('.') + 1);
+                if (head.startsWith("[")) {
+                    final int index = Integer.parseInt(head.substring(1, head.length() - 1));
+                    if (obj.has(index)) {
+                        return getNested(obj.get(index), tail);
+                    } else {
+                        System.err.println("Could not find index: " + index);
+                        return JsonNodeFactory.instance.nullNode(); // error!
+                    }
+                }
                 if (obj.has(head)) {
                     return getNested(obj.get(head), tail);
                 } else {
@@ -945,33 +1081,66 @@ public class SimpleTweetEditorUI extends JPanel {
         }
 
         public void set(String path, Object value) {
-            setNested((ObjectNode) root, path, value);
+            setNested(root, path, value);
         }
 
-        void setNested(final ObjectNode obj, final String path, final Object value) {
+        void setNested(final JsonNode node, final String path, final Object value) {
             if (path.contains(".")) {
                 final String head = path.substring(0, path.indexOf('.'));
                 final String tail = path.substring(path.indexOf('.') + 1);
-                if (obj.has(head)) {
-                    setNested((ObjectNode) obj.get(head), tail, value);
+                if (head.startsWith("[")) { // deal with arrays of structures
+                    final int index = Integer.parseInt(head.substring(1, head.length() - 1));
+                    if (node.has(index)) {
+                        setNested(node.get(index), tail, value);
+                    } else {
+                        System.err.println("Could not find index: " + index);
+                    }
+                } else if (node.has(head)) {
+                    if (tail.startsWith("[")) {
+                        setNested(node.get(head), tail, value);
+                    } else {
+                        setNested(node.get(head), tail, value);
+                    }
                 } else {
                     System.err.println("Could not find sub-path: " + tail);
                 }
             } else {
                 final JsonNodeFactory jsonNodeFactory = JsonNodeFactory.instance;
+                ObjectNode obj = null;
+                if (path.startsWith("[")) { // deal with arrays of values
+                    final int index = Integer.parseInt(path.substring(1, path.length() - 1));
+                    if (node.has(index)) {
+                        obj = (ObjectNode) node.get(index); // set node to the indexed element
+                    } else {
+                        System.err.println("Could not find index: " + index);
+                    }
+                } else {
+                    obj = (ObjectNode) node;
+                }
+
                 if (value == null) {
                     obj.set(path, jsonNodeFactory.nullNode());
                 } else if (value instanceof JsonNode) {
                     obj.set(path, (JsonNode) value);
                 } else if (value instanceof Boolean) {
                     obj.set(path, jsonNodeFactory.booleanNode((Boolean) value));
+                } else if (value instanceof BigDecimal) {
+                    obj.set(path, jsonNodeFactory.numberNode((BigDecimal) value));
                 } else if (value instanceof String) {
                     obj.set(path, jsonNodeFactory.textNode(value.toString()));
                 } else if (value instanceof double[]) { //value.getClass().isArray()) {
                     final ArrayNode arrayNode = jsonNodeFactory.arrayNode();
                     double[] array = (double[]) value;
-                    arrayNode.add(array[0]);
-                    arrayNode.add(array[1]);
+                    for (double d : array) {
+                        arrayNode.add(d);
+                    }
+                    obj.set(path, arrayNode);
+                } else if (value instanceof int[]) {
+                    final ArrayNode arrayNode = jsonNodeFactory.arrayNode();
+                    int[] array = (int[]) value;
+                    for (int i : array) {
+                        arrayNode.add(i);
+                    }
                     obj.set(path, arrayNode);
                 }
             }
