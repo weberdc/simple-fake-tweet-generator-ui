@@ -81,6 +81,8 @@ import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.UnsupportedFlavorException;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
@@ -550,42 +552,45 @@ public class SimpleTweetEditorUI extends JPanel {
                 mediaUrlTF.setSelectionEnd(mediaUrlTF.getText().length());
             }
         });
-        mediaUrlTF.getDocument().addDocumentListener(newUpdateOnChangeListener(()-> {
-            final String mediaUrl = mediaUrlTF.getText();
+        mediaUrlTF.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) {
+                final String mediaUrl = mediaUrlTF.getText();
 
-            // deal with situation when the first media entity doesn't exist,
-            // which happens if you paste in a pre-existing tweet
-            if (mediaUrl.trim().isEmpty()) {
-                // remove entity but keep the list
-                model.set("entities.media", JsonNodeFactory.instance.arrayNode());
-                return;
-            } else {
-                ensureMediaEntityExists();
+                // deal with situation when the first media entity doesn't exist,
+                // which happens if you paste in a pre-existing tweet
+                if (mediaUrl.trim().isEmpty()) {
+                    // remove entity but keep the list
+                    model.set("entities.media", JsonNodeFactory.instance.arrayNode());
+                    return;
+                } else {
+                    ensureMediaEntityExists();
+                }
+
+                model.set("entities.media.[0].media_url_https", mediaUrl);
+                model.set("entities.media.[0].url", mediaUrl);
+                model.set("entities.media.[0].display_url", mediaUrl);
+                model.set("entities.media.[0].extended_url", mediaUrl);
+                model.set("entities.media.[0].type", "photo");
+                final String newID = generateID();
+                model.set("entities.media.[0].id", BigDecimal.valueOf(Long.parseLong(newID)));
+                model.set("entities.media.[0].id_str", newID);
+                final String msg = textArea.getText();
+                final boolean trailingSpace = ! msg.isEmpty() && msg.charAt(msg.length() - 1) == ' ';
+                if (! msg.contains(mediaUrl)) {
+                    textArea.setText(msg + (trailingSpace ? "" : " ") + mediaUrl);
+                }
+                final int indexOfUrl = textArea.getText().indexOf(mediaUrl);
+                final int[] indices = new int[]{indexOfUrl, indexOfUrl + mediaUrl.length()};
+                model.set("entities.media.[0].indices", indices);
+                model.set("entities.media.[0].source_status_id", null);
+                model.set("entities.media.[0].source_status_id_str", null);
+
+                setAttachedMediaSize(mediaUrl);
+
+                updateJsonTextArea();
             }
-
-            model.set("entities.media.[0].media_url_https", mediaUrl);
-            model.set("entities.media.[0].url", mediaUrl);
-            model.set("entities.media.[0].display_url", mediaUrl);
-            model.set("entities.media.[0].extended_url", mediaUrl);
-            model.set("entities.media.[0].type", "photo");
-            final String newID = generateID();
-            model.set("entities.media.[0].id", BigDecimal.valueOf(Long.parseLong(newID)));
-            model.set("entities.media.[0].id_str", newID);
-            final String msg = textArea.getText();
-            final boolean trailingSpace = ! msg.isEmpty() && msg.charAt(msg.length() - 1) == ' ';
-            if (! msg.contains(mediaUrl)) {
-                textArea.setText(msg + (trailingSpace ? "" : " ") + mediaUrl);
-            }
-            final int indexOfUrl = textArea.getText().indexOf(mediaUrl);
-            final int[] indices = new int[]{indexOfUrl, indexOfUrl + mediaUrl.length()};
-            model.set("entities.media.[0].indices", indices);
-            model.set("entities.media.[0].source_status_id", null);
-            model.set("entities.media.[0].source_status_id_str", null);
-
-            setAttachedMediaSize(mediaUrl);
-
-            updateJsonTextArea();
-        }));
+        });
         mediaUrlTF.setInputVerifier(new InputVerifier() {
             @Override
             public boolean verify(JComponent input) {
