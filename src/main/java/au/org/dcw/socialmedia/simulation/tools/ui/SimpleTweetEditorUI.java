@@ -591,7 +591,9 @@ public class SimpleTweetEditorUI extends JPanel {
             public boolean verify(JComponent input) {
                 final String hopefullyAnUrl = ((JTextField) input).getText();
                 try {
-                    new URL(hopefullyAnUrl);
+                    if (hopefullyAnUrl.trim().length() > 0) {
+                        new URL(hopefullyAnUrl);
+                    }
                     return true;
                 } catch (MalformedURLException e) {
                     System.err.println("Can't parse URL: " + e.getMessage());
