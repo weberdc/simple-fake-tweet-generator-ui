@@ -15,4 +15,4 @@ include 'api'
 include 'services:webservice'
 */
 
-rootProject.name = 'simple-fake-tweet-generator-ui'
+rootProject.name = 'simple-tweet-editor'

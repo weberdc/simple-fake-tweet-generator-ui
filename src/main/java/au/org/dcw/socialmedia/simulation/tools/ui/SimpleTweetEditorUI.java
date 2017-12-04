@@ -211,7 +211,7 @@ public class SimpleTweetEditorUI extends JPanel {
 
     private void run() {
         // Create and set up the window
-        JFrame frame = new JFrame("Tweet Editor");
+        JFrame frame = new JFrame("Simple Tweet Editor");
         frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         System.out.println("Frame created");
 
