@@ -199,7 +199,7 @@ public class GeoPanel extends JPanel {
                     lonTF.setText(parts[1]);
                     changed = true;
                 }
-                if (changed) {
+                if (! parts[0].equals("-") && ! parts[1].equals("-") && changed) {
                     final double lat = Double.parseDouble(parts[0]);
                     final double lon = Double.parseDouble(parts[1]);
                     mapUI.setCenterPosition(new GeoPosition(lat, lon));
@@ -212,7 +212,11 @@ public class GeoPanel extends JPanel {
             final String newLatLon = latTF.getText() + "," + lonStr;
             if (! latLonTF.getText().equals(newLatLon)) {
                 latLonTF.setText(newLatLon);
-                final double lat = Double.parseDouble(latTF.getText());
+                double lat = 0;
+                if (latTF.getText() != null && !latTF.getText().isEmpty()) {
+                    Double.parseDouble(latTF.getText());
+                }
+//                final double lat = Double.parseDouble(latTF.getText());
                 final GeoPosition centre = mapUI.getCenterPosition();
                 mapUI.setCenterPosition(new GeoPosition(lat, centre.getLongitude()));
                 fireUpdate(mapUI.getCenterPosition());
@@ -224,7 +228,10 @@ public class GeoPanel extends JPanel {
             final String newValue = latStr + "," + lonTF.getText();
             if (! latLonTF.getText().equals(newValue)) {
                 latLonTF.setText(newValue);
-                final double lon = Double.parseDouble(lonTF.getText());
+                double lon = 0;
+                if (lonTF.getText() != null && !lonTF.getText().isEmpty()) {
+                    Double.parseDouble(lonTF.getText());
+                }
                 final GeoPosition centre = mapUI.getCenterPosition();
                 mapUI.setCenterPosition(new GeoPosition(centre.getLatitude(), lon));
                 fireUpdate(mapUI.getCenterPosition());

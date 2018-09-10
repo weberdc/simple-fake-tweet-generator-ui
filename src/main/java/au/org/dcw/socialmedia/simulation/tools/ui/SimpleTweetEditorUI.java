@@ -15,59 +15,6 @@
  */
 package au.org.dcw.socialmedia.simulation.tools.ui;
 
-import com.beust.jcommander.JCommander;
-import com.beust.jcommander.Parameter;
-import com.beust.jcommander.ParameterException;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.twitter.Extractor;
-import org.jxmapviewer.viewer.GeoPosition;
-import twitter4j.GeoLocation;
-import twitter4j.GeoQuery;
-import twitter4j.Place;
-import twitter4j.RateLimitStatus;
-import twitter4j.RateLimitStatusEvent;
-import twitter4j.RateLimitStatusListener;
-import twitter4j.ResponseList;
-import twitter4j.Twitter;
-import twitter4j.TwitterException;
-import twitter4j.TwitterFactory;
-import twitter4j.TwitterObjectFactory;
-import twitter4j.conf.Configuration;
-import twitter4j.conf.ConfigurationBuilder;
-
-import javax.imageio.ImageIO;
-import javax.swing.BorderFactory;
-import javax.swing.DefaultComboBoxModel;
-import javax.swing.Icon;
-import javax.swing.ImageIcon;
-import javax.swing.InputVerifier;
-import javax.swing.JButton;
-import javax.swing.JCheckBox;
-import javax.swing.JComboBox;
-import javax.swing.JComponent;
-import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JList;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JScrollPane;
-import javax.swing.JSpinner;
-import javax.swing.JSplitPane;
-import javax.swing.JTextArea;
-import javax.swing.JTextField;
-import javax.swing.ListCellRenderer;
-import javax.swing.SpinnerDateModel;
-import javax.swing.SwingUtilities;
-import javax.swing.WindowConstants;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -86,18 +33,23 @@ import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.Reader;
 import java.math.BigDecimal;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoField;
+import java.time.temporal.TemporalAccessor;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
@@ -106,15 +58,91 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
+import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
+
+import javax.imageio.ImageIO;
+import javax.swing.BorderFactory;
+import javax.swing.DefaultComboBoxModel;
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
+import javax.swing.InputVerifier;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JSpinner;
+import javax.swing.JSplitPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.ListCellRenderer;
+import javax.swing.SpinnerDateModel;
+import javax.swing.SwingUtilities;
+import javax.swing.WindowConstants;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.StatusLine;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.mime.HttpMultipartMode;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.LongSerializer;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.jxmapviewer.viewer.GeoPosition;
+
+import com.beust.jcommander.JCommander;
+import com.beust.jcommander.Parameter;
+import com.beust.jcommander.ParameterException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.twitter.Extractor;
+
+import twitter4j.GeoLocation;
+import twitter4j.GeoQuery;
+import twitter4j.Place;
+import twitter4j.RateLimitStatus;
+import twitter4j.RateLimitStatusEvent;
+import twitter4j.RateLimitStatusListener;
+import twitter4j.ResponseList;
+import twitter4j.Twitter;
+import twitter4j.TwitterException;
+import twitter4j.TwitterFactory;
+import twitter4j.TwitterObjectFactory;
+import twitter4j.conf.Configuration;
+import twitter4j.conf.ConfigurationBuilder;
 
 public class SimpleTweetEditorUI extends JPanel {
 
     private static final DateTimeFormatter TWITTER_TIMESTAMP_FORMAT =
         DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss Z yyyy", Locale.ENGLISH);
+    private static final SimpleDateFormat ELIIXAR_TS_FORMAT = new SimpleDateFormat("MMM dd, yyyy hh:mm:ss Z");
     private static final int TWITTER_OLD_MAX_LENGTH = 140;
+    private static final String ELIIXAR_AUTH = "Basic c29jaWFsbWVkaWE6U29jaWFsTWVkaWFQYXNzd29yZA==";
 
     // standard default values for attached media
     private static final int DEFAULT_THUMB_HEIGHT = 100;
@@ -203,9 +231,9 @@ public class SimpleTweetEditorUI extends JPanel {
     private String freshTweetJson() {
         final String id = generateID();
         final String createdAt = now();
-        return "{\"coordinates\":{\"coordinates\":[138.604,-34.918],\"type\":\"Point\"}," +
+        return "{\"coordinates\":{\"coordinates\":[-73.603184,45.495719],\"type\":\"Point\"}," +
             "\"created_at\":\""+ createdAt + "\",\"full_text\":\"\",\"id\":" + id +
-            ",\"id_str\":\"" + id + "\",\"text\":\"\",\"user\":{\"screen_name\":\"\"}," +
+            ",\"id_str\":\"" + id + "\",\"text\":\"\",\"user\":{\"screen_name\":\"\",\"name\":\"\"}," +
             "\"entities\":{\"media\":[{\"media_url_https\":\"\"}]}}";
     }
 
@@ -220,7 +248,7 @@ public class SimpleTweetEditorUI extends JPanel {
         System.out.println("UI built");
 
         // Display the window
-        frame.setSize(700, 600);
+        frame.setSize(900, 900);
         System.out.println("Size set");
         frame.setVisible(true);
 
@@ -228,6 +256,7 @@ public class SimpleTweetEditorUI extends JPanel {
         System.out.println(fqName.substring(fqName.lastIndexOf('.') + 1) + " is now running...");
     }
 
+    @SuppressWarnings("unchecked")
     private void buildUI() {
 
         // STRUCTURE
@@ -242,7 +271,7 @@ public class SimpleTweetEditorUI extends JPanel {
 
         final JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, right);
         splitPane.setOneTouchExpandable(true);
-        splitPane.setDividerLocation(400);
+        splitPane.setDividerLocation(500);
 
         this.add(splitPane, BorderLayout.CENTER);
 
@@ -267,6 +296,7 @@ public class SimpleTweetEditorUI extends JPanel {
         final String sn = screenNameObj != null ? screenNameObj.toString() : "";
         if (sn.equals("\"\"")) { // rescue us from the terrible "" bug!
             model.set("user.screen_name", "");
+            model.set("user.name", "");
         } else {
             namePicker.addItem(sn);
             namePicker.setSelectedItem(sn);
@@ -450,9 +480,130 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.fill = GridBagConstraints.BOTH;
         gbc.insets = new Insets(0, 0, 5, 0);
         left.add(geoPanel, gbc);
+        
+        
+        // Row 9: CUE2018 panel
+        row++;
+        final JPanel cue2018Panel = new JPanel(new GridBagLayout());
+        cue2018Panel.setBorder(BorderFactory.createTitledBorder("CUE 2018"));
 
+        // Row 9.1: Eliixar
+        final JPanel eliixarPanel = new JPanel(new GridBagLayout());
+        eliixarPanel.setBorder(BorderFactory.createTitledBorder("Eliixar"));
+        
+        gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        cue2018Panel.add(eliixarPanel, gbc);
 
-        // Row 9: generate button
+        // Row 9.2: Kafka
+        final JPanel kafkaPanel = new JPanel(new GridBagLayout());
+        kafkaPanel.setBorder(BorderFactory.createTitledBorder("Kafka"));
+
+        gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        gbc.gridy = 1;
+        cue2018Panel.add(kafkaPanel, gbc);
+
+        // row 9.1
+        // - Eliixar URL, default http://192.168.35.170:8080/cxf/eliixar/entry
+        final JLabel eliixarAddrLabel = new JLabel("Add Entry Address:");
+        final JTextField eliixarAddrField = new JTextField("http://192.168.35.170:8080/cxf/eliixar/entry");
+        eliixarAddrLabel.setLabelFor(eliixarAddrField);
+        // - Eliixar post button
+        final JButton postToEliixarButton = new JButton("Post");
+        postToEliixarButton.setToolTipText("Inserts the tweet into Eliixar");
+        // - Image file attachment: file selector button and path label
+        final JButton eliixarAttachmentButton = new JButton("Attach image...");
+        final JLabel eliixarAttachmentLabel = new JLabel();
+        eliixarAttachmentLabel.setLabelFor(eliixarAttachmentButton);
+        final JButton clearAttachmentButton = new JButton(removeIcon);
+        clearAttachmentButton.setToolTipText("Clear the attached file");
+
+        gbc = new GridBagConstraints();
+        gbc.anchor = GridBagConstraints.NORTHWEST;
+        gbc.insets = new Insets(0, 5, 0, 5);
+        eliixarPanel.add(eliixarAddrLabel, gbc);
+        gbc = new GridBagConstraints();
+        gbc.gridx = 1;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1.0;
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        eliixarPanel.add(eliixarAddrField, gbc);
+        gbc = new GridBagConstraints();
+        gbc.gridy = 1;
+        gbc.insets = new Insets(0, 5, 0, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+        eliixarPanel.add(eliixarAttachmentButton, gbc);
+        gbc = new GridBagConstraints();
+        gbc.gridx = 1;
+        gbc.gridy = 1;
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.weightx = 1.0;
+        eliixarPanel.add(eliixarAttachmentLabel, gbc);
+        gbc = new GridBagConstraints();
+        gbc.gridx = 2;
+        gbc.gridy = 1;
+        eliixarPanel.add(clearAttachmentButton, gbc);
+        gbc = new GridBagConstraints();
+        gbc.gridx = 3;
+        gbc.gridheight = 2;
+        gbc.insets = new Insets(0, 5, 0, 0);
+        gbc.weighty = 1.0;
+        gbc.fill = GridBagConstraints.VERTICAL;
+        eliixarPanel.add(postToEliixarButton, gbc);
+        
+        // row 9.2
+        // - Kafka host:port 
+        final JLabel kafkaAddrLabel = new JLabel("Kafka Address:");
+        final JTextField kafkaAddrField = new JTextField("localhost:9092");
+        kafkaAddrLabel.setLabelFor(kafkaAddrField);
+        // - Kafka topic
+        final JLabel kafkaTopicLabel = new JLabel("Kafka Topic:");
+        final JTextField kafkaTopicField = new JTextField("processed_tweets");
+        kafkaTopicLabel.setLabelFor(kafkaTopicField);
+        // - Kafka & Eliixar post button
+        final JButton postToEliixarAndKafkaButton = new JButton("Post to both");
+        postToEliixarAndKafkaButton.setToolTipText("Posts the tweet to Eliixar first, then to Kafka, including the Eliixar entry address");
+        
+        gbc = new GridBagConstraints();
+        gbc.anchor = GridBagConstraints.NORTHWEST;
+        gbc.insets = new Insets(0, 5, 0, 5);
+        kafkaPanel.add(kafkaAddrLabel, gbc);
+        gbc = new GridBagConstraints();
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        kafkaPanel.add(kafkaAddrField, gbc);
+        gbc = new GridBagConstraints();
+        gbc.gridy = 1;
+        gbc.insets = new Insets(0, 5, 0, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+        kafkaPanel.add(kafkaTopicLabel, gbc);
+        gbc = new GridBagConstraints();
+        gbc.gridx = 1;
+        gbc.gridy = 1;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        kafkaPanel.add(kafkaTopicField, gbc);
+        gbc = new GridBagConstraints();
+        gbc.gridx = 2;
+        gbc.gridheight = 2;
+        gbc.insets = new Insets(0, 5, 0, 0);
+        gbc.weighty = 1.0;
+        gbc.fill = GridBagConstraints.VERTICAL;
+        kafkaPanel.add(postToEliixarAndKafkaButton, gbc);
+
+        gbc = new GridBagConstraints();
+        gbc.gridy = row;
+        gbc.gridwidth = 2;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(0, 0, 5, 0);
+        left.add(cue2018Panel, gbc);
+
+        // Row 10: generate button
         row++;
         final JButton generateJsonButton = new JButton("Push JSON to global clipboard");
 
@@ -464,7 +615,7 @@ public class SimpleTweetEditorUI extends JPanel {
         left.add(generateJsonButton, gbc);
 
 
-        // Row 10: new tweet button
+        // Row 11: new tweet button
         row++;
         final JButton newButton = new JButton("New Tweet");
         newButton.setToolTipText("Refresh the editor for a new Tweet");
@@ -525,6 +676,7 @@ public class SimpleTweetEditorUI extends JPanel {
             final String newName = (String) namePicker.getSelectedItem();
             namePicker.addItem(newName);
             model.set("user.screen_name", newName);
+            model.set("user.name", newName);
             updateJsonTextArea();
         });
         nameButton.addActionListener(e -> {
@@ -648,6 +800,72 @@ public class SimpleTweetEditorUI extends JPanel {
                 SwingUtilities.invokeLater(this::updateJsonTextArea); // makes the UI a little more responsive
             }
         });
+        // CUE 2018 behaviour
+        postToEliixarButton.addActionListener(e -> {
+            try {
+                String eliixarEntryUrl = postToEliixar(eliixarAddrField.getText(), eliixarAttachmentLabel.getText());
+                System.out.println("New ELIIXAR Entry: " + eliixarEntryUrl);
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(
+                    SimpleTweetEditorUI.this, 
+                    "Can't post to Eliixar: " + ex.getMessage(), 
+                    "Failed to post tweet", 
+                    JOptionPane.ERROR_MESSAGE
+                );
+                ex.printStackTrace();
+            }
+        });
+        final JFileChooser fc = new JFileChooser();
+        eliixarAttachmentButton.addActionListener(e -> {
+            int returnVal = fc.showOpenDialog(SimpleTweetEditorUI.this);
+            if (returnVal == JFileChooser.APPROVE_OPTION) {
+                File file = fc.getSelectedFile();
+                eliixarAttachmentLabel.setText(file.getPath());
+            }
+        });
+        clearAttachmentButton.addActionListener(e -> eliixarAttachmentLabel.setText(""));
+        postToEliixarAndKafkaButton.setEnabled(false);
+        postToEliixarAndKafkaButton.addActionListener(e -> {
+            try {
+                String eliixarEntryUrl = postToEliixar(eliixarAddrField.getText(), eliixarAttachmentLabel.getText());
+
+                if (true) return; // for the moment
+                
+                // add to model.root and convert to a JSON string, then create the entry.
+//                model.root.
+                
+//                String newEntry = 
+                final Producer<Long, String> kafkaProducer = createProducer(kafkaAddrField.getText());
+                try {
+
+                final long time = System.currentTimeMillis();
+                final ProducerRecord<Long, String> record =
+                    new ProducerRecord<>(kafkaTopicField.getText(), time, null);//newEntry);
+                kafkaProducer.send(record, (metadata, exception) -> {
+                    long elapsedTime = System.currentTimeMillis() - time;
+                    if (metadata != null) {
+                        System.out.printf("sent record(key=%s value=%s) " +
+                                          "meta(partition=%d, offset=%d) time=%d\n",
+                                record.key(), record.value(), metadata.partition(),
+                                metadata.offset(), elapsedTime);
+                    } else {
+                        exception.printStackTrace();
+                    }
+                });
+                } finally {
+                    kafkaProducer.close(10*1000, TimeUnit.MILLISECONDS);
+                }
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(
+                    SimpleTweetEditorUI.this, 
+                    "Can't post to Eliixar or Kafka: " + ex.getMessage(), 
+                    "Failed to post tweet", 
+                    JOptionPane.ERROR_MESSAGE
+                );
+                // TODO Auto-generated catch block
+                ex.printStackTrace();
+            }
+        });
         // paste from clipboard to the full json text area
         pasteFromClipboardButton.addActionListener(e -> {
             final String originalContent = jsonTextArea.getText();
@@ -688,6 +906,134 @@ public class SimpleTweetEditorUI extends JPanel {
                 );
             }
         });
+    }
+
+    private String postToEliixar(final String eliixarAddr, final String attachmentPath) 
+        throws IOException {
+        System.err.println("Post to eliixar at " + eliixarAddr + " + " + attachmentPath);
+        Map<String, Object> newEntryMap = new TreeMap<>();
+        newEntryMap.put("entryTitle", model.get("id_str").asText());
+        newEntryMap.put("originatingOrganisation", "DST");
+        newEntryMap.put("publishingOrganisation", "DST");
+        newEntryMap.put("securityClassification", "UNCLASSIFIED");
+        newEntryMap.put("securityClassifyingCountry", "AUS");
+        newEntryMap.put("securityDisseminationControl", "REL");
+        newEntryMap.put("securityReleaseableTo", "FVEY");
+        newEntryMap.put("eventTime", formatTSForEliixar(model.get("created_at").asText()));
+        newEntryMap.put("freeText", JSON.writeValueAsString(model.root));
+        newEntryMap.put("richText", String.format(
+            "<bold>@%s</bold> (%s):<br/><br/>%s<br/><br/>Translated to:<br/><br/>%s", 
+            model.get("user.screen_name").asText(), 
+            model.get("user.name").asText(),
+            model.get("text").asText(),
+            model.get("translation").asText()
+        ));
+        // geo
+        Map<String, Object> geoLoc = new TreeMap<>();
+        geoLoc.put("type", "Point");
+        geoLoc.put("confidence", 0.99);
+        geoLoc.put("coordinates", Arrays.asList(
+            model.get("coordinates.coordinates[0]").asDouble(45.5),
+            model.get("coordinates.coordinates[0]").asDouble(-73.5)
+        ));
+        newEntryMap.put("geoLocation", geoLoc);
+        // product
+        if (attachmentPath != null && ! attachmentPath.trim().isEmpty()) {
+            final Map<String, String> metadata = new TreeMap<>();
+            final String[] splitByDot = attachmentPath.split("\\.");
+            final String extension = splitByDot[splitByDot.length - 1];
+            final String[] splitBySlash = 
+                attachmentPath.split("\\" + System.getProperty("file.separator"));
+            String filename = splitBySlash[splitBySlash.length - 1];
+            filename = filename.substring(0, filename.lastIndexOf('.'));
+            final String productName = model.get("id_str").asText() + "__DST__" + filename;
+
+            metadata.put("productName", productName);
+            metadata.put("productExtension", extension);
+            metadata.put("reportType", "SIGINT");
+            metadata.put("media_url", attachmentPath);
+                        
+            newEntryMap.put("associatedProducts", Arrays.asList(metadata));
+        }
+        String newEntry = JSON.writeValueAsString(newEntryMap);
+        
+        // https://www.mkyong.com/java/how-to-send-http-request-getpost-in-java/
+        CloseableHttpClient client = HttpClientBuilder.create().build();// new DefaultHttpClient();
+        HttpPost post = new HttpPost(eliixarAddr);
+
+        // add header
+        post.setHeader("User-Agent", "Mozilla 5.0");
+        post.setHeader("authorization", ELIIXAR_AUTH);
+        post.setHeader("Content-Type", "multipart/form-data");
+
+//        FileBody attachmentBody = new FileBody(new File(attachmentPath), ContentType.DEFAULT_BINARY);
+//        StringBody entryBody = new StringBody(newEntry, ContentType.MULTIPART_FORM_DATA);
+        
+        MultipartEntityBuilder mpBuilder = MultipartEntityBuilder.create();
+        mpBuilder.setMode(HttpMultipartMode.BROWSER_COMPATIBLE);
+        mpBuilder.addTextBody("entry", newEntry, ContentType.APPLICATION_JSON);
+        if (attachmentPath != null && !attachmentPath.trim().equals("")) {
+            mpBuilder.addBinaryBody(
+                "productBinary", 
+                new File(attachmentPath), 
+                ContentType.DEFAULT_BINARY, 
+                attachmentPath
+            );
+        }
+        HttpEntity entity = mpBuilder.build();
+        post.setEntity(entity);
+
+        HttpResponse response = client.execute(post);
+
+        System.out.println("\nSending 'POST' request to URL : " + eliixarAddr);
+        System.out.println("Post parameters : " + post.getEntity());
+        System.out.println("content type: " + entity.getContentType());
+        System.out.println("content length: " + entity.getContentLength());
+        StatusLine status = response.getStatusLine();
+        System.out.println("Response Code : " + status.getStatusCode());
+        
+        if (status.getStatusCode() != 200) {
+            return String.format("HTTP Error: [%d] %s", status.getStatusCode(), status.getReasonPhrase());
+        }
+
+        BufferedReader rd = new BufferedReader(new InputStreamReader(response.getEntity().getContent()));
+
+        StringBuffer result = new StringBuffer();
+        String line = "";
+        while ((line = rd.readLine()) != null) {
+            result.append(line);
+        }
+
+        final JsonNode eliixarAnswer = JSON.readValue(result.toString(), JsonNode.class);
+        
+        System.out.println(result.toString());
+        
+        if (eliixarAnswer.get("success").asBoolean()) {
+            String newEntryId = eliixarAnswer.get("id").asText();
+            return eliixarAddr + (eliixarAddr.endsWith("/") ? "" : "/") + newEntryId;
+        } else {
+            return result.toString();
+        }
+    }
+
+    private String formatTSForEliixar(final String twitterTSStr) {
+
+        final TemporalAccessor twitterTS = TWITTER_TIMESTAMP_FORMAT.parse(twitterTSStr);
+        
+        long nanos = twitterTS.getLong(ChronoField.NANO_OF_SECOND);
+        long epochSeconds = twitterTS.getLong(ChronoField.INSTANT_SECONDS);
+        Date twitterDate = Date.from(Instant.ofEpochSecond(epochSeconds, nanos));
+        
+        return ELIIXAR_TS_FORMAT.format(twitterDate);
+    }
+    
+    private static Producer<Long, String> createProducer(final String brokerList) {
+        Properties props = new Properties();
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList);
+        props.put(ProducerConfig.CLIENT_ID_CONFIG, "Fake Tweet Kafka Producer");
+        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, LongSerializer.class.getName());
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        return new KafkaProducer<>(props);
     }
 
     private void ensureMediaEntityExists() {
