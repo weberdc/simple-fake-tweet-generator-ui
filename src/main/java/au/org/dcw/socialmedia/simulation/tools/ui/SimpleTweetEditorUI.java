@@ -43,6 +43,10 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.time.ZonedDateTime;
@@ -65,6 +69,9 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import javax.imageio.ImageIO;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.Icon;
@@ -96,11 +103,13 @@ import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.StatusLine;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.mime.HttpMultipartMode;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.client.HttpClients;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -509,7 +518,7 @@ public class SimpleTweetEditorUI extends JPanel {
         // row 9.1
         // - Eliixar URL, default http://192.168.35.170:8080/cxf/eliixar/entry
         final JLabel eliixarAddrLabel = new JLabel("Add Entry Address:");
-        final JTextField eliixarAddrField = new JTextField("http://192.168.35.170:8080/cxf/eliixar/entry");
+        final JTextField eliixarAddrField = new JTextField("https://192.168.35.170:8080/cxf/eliixar/entry");
         eliixarAddrLabel.setLabelFor(eliixarAddrField);
         // - Eliixar post button
         final JButton postToEliixarButton = new JButton("Post");
@@ -957,8 +966,37 @@ public class SimpleTweetEditorUI extends JPanel {
         }
         String newEntry = JSON.writeValueAsString(newEntryMap);
         
+        // disable ssl
+        TrustManager[] trustAllCerts = new TrustManager[] {
+                new X509TrustManager() {
+             public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                 return null;
+             }
+             public void checkClientTrusted(X509Certificate[] certs, String authType) {  }
+
+             public void checkServerTrusted(X509Certificate[] certs, String authType) {  }
+             }
+         };
+
+         SSLContext sc = null;
+         
+
+         
+        try {
+            sc = SSLContext.getInstance("SSL");
+            sc.init(null, trustAllCerts, new SecureRandom());
+        } catch (NoSuchAlgorithmException | KeyManagementException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+        
         // https://www.mkyong.com/java/how-to-send-http-request-getpost-in-java/
-        CloseableHttpClient client = HttpClientBuilder.create().build();// new DefaultHttpClient();
+//        CloseableHttpClient client = HttpClientBuilder.create().build();// new DefaultHttpClient();
+        CloseableHttpClient client = HttpClients
+            .custom()
+            .setSSLHostnameVerifier(NoopHostnameVerifier.INSTANCE)
+            .setSSLContext(sc)
+            .build();
         HttpPost post = new HttpPost(eliixarAddr);
 
         // add header
