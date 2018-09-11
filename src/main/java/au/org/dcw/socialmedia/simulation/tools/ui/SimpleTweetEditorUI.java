@@ -840,34 +840,32 @@ public class SimpleTweetEditorUI extends JPanel {
             }
         });
         clearAttachmentButton.addActionListener(e -> eliixarAttachmentLabel.setText(""));
-        postToEliixarAndKafkaButton.setEnabled(false);
+        postToEliixarAndKafkaButton.setEnabled(true);
         postToEliixarAndKafkaButton.addActionListener(e -> {
             try {
-                String eliixarEntryUrl = postToEliixar(eliixarAddrField.getText(), eliixarAttachmentLabel.getText());
+                final String eliixarEntryUrl = postToEliixar(eliixarAddrField.getText(), eliixarAttachmentLabel.getText());
 
-                if (true) return; // for the moment
+                // if (true) return; // for the moment
 
-                // add to model.root and convert to a JSON string, then create the entry.
-//                model.root.
-
-//                String newEntry =
+                final String newEntry = model.root.toString();
+                System.out.println("Kafka payload: " + newEntry);
                 final Producer<Long, String> kafkaProducer = createProducer(kafkaAddrField.getText());
                 try {
 
-                final long time = System.currentTimeMillis();
-                final ProducerRecord<Long, String> record =
-                    new ProducerRecord<>(kafkaTopicField.getText(), time, null);//newEntry);
-                kafkaProducer.send(record, (metadata, exception) -> {
-                    long elapsedTime = System.currentTimeMillis() - time;
-                    if (metadata != null) {
-                        System.out.printf("sent record(key=%s value=%s) " +
-                                          "meta(partition=%d, offset=%d) time=%d\n",
-                                record.key(), record.value(), metadata.partition(),
-                                metadata.offset(), elapsedTime);
-                    } else {
-                        exception.printStackTrace();
-                    }
-                });
+                    final long time = System.currentTimeMillis();
+                    final ProducerRecord<Long, String> record =
+                        new ProducerRecord<>(kafkaTopicField.getText(), time, newEntry);
+                    kafkaProducer.send(record, (metadata, exception) -> {
+                        long elapsedTime = System.currentTimeMillis() - time;
+                        if (metadata != null) {
+                            System.out.printf("sent record(key=%s value=%s) " +
+                                              "meta(partition=%d, offset=%d) time=%d\n",
+                                    record.key(), record.value(), metadata.partition(),
+                                    metadata.offset(), elapsedTime);
+                        } else {
+                            exception.printStackTrace();
+                        }
+                    });
                 } finally {
                     kafkaProducer.close(10*1000, TimeUnit.MILLISECONDS);
                 }
@@ -927,6 +925,25 @@ public class SimpleTweetEditorUI extends JPanel {
     private String postToEliixar(final String eliixarAddr, final String attachmentPath)
         throws IOException {
         System.err.println("Post to eliixar at " + eliixarAddr + " + " + attachmentPath);
+
+        // augment tweet with DST content
+        final double lon = model.get("coordinates.coordinates[0]").asDouble(-73.5);
+        final double lat = model.get("coordinates.coordinates[1]").asDouble(45.5);
+
+        if (! model.has("dst")) {
+            model.set("dst", JsonNodeFactory.instance.objectNode());
+        }
+        if (! model.has("dst.geo")) {
+            model.set("dst.geo", JsonNodeFactory.instance.objectNode());
+        }
+        model.set("dst.geo.lat", JsonNodeFactory.instance.numberNode(lat));
+        model.set("dst.geo.lon", JsonNodeFactory.instance.numberNode(lon));
+        model.set("dst.geo.radius", JsonNodeFactory.instance.numberNode(10));
+        model.set("dst.geo.confidence", JsonNodeFactory.instance.numberNode(0.99));
+
+        updateJsonTextArea();
+        System.err.println("Augmented tweet: " + model.root.toString());
+
         Map<String, Object> newEntryMap = new TreeMap<>();
         newEntryMap.put("entryTitle", model.get("id_str").asText());
         newEntryMap.put("originatingOrganisation", "DST");
@@ -942,15 +959,15 @@ public class SimpleTweetEditorUI extends JPanel {
             model.get("user.screen_name").asText(),
             model.get("user.name").asText(),
             model.get("text").asText(),
-            model.get("translation").asText()
+            model.get("dst.translation").asText("")
         ));
         // geo
         Map<String, Object> geoLoc = new TreeMap<>();
         geoLoc.put("type", "Point");
         geoLoc.put("confidence", 0.99);
         geoLoc.put("coordinates", Arrays.asList(
-            model.get("coordinates.coordinates[0]").asDouble(45.5),
-            model.get("coordinates.coordinates[0]").asDouble(-73.5)
+            lon, //model.get("coordinates.coordinates[0]").asDouble(-73.5),
+            lat //model.get("coordinates.coordinates[1]").asDouble(45.5)
         ));
         newEntryMap.put("geoLocation", geoLoc);
         // product
@@ -1049,7 +1066,9 @@ public class SimpleTweetEditorUI extends JPanel {
 
         if (eliixarAnswer.get("success").asBoolean()) {
             String newEntryId = eliixarAnswer.get("id").asText();
-            return eliixarAddr + (eliixarAddr.endsWith("/") ? "" : "/") + newEntryId;
+            String entryUrl = eliixarAddr + (eliixarAddr.endsWith("/") ? "" : "/") + newEntryId;
+            model.set("dst.eliixar_url", entryUrl);
+            return entryUrl;
         } else {
             return result.toString();
         }
