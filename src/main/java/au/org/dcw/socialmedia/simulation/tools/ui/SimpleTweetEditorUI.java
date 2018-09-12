@@ -1041,6 +1041,9 @@ public class SimpleTweetEditorUI extends JPanel {
         model.set("dst.geo.lon", JsonNodeFactory.instance.numberNode(lon));
         model.set("dst.geo.radius", JsonNodeFactory.instance.numberNode(10));
         model.set("dst.geo.confidence", JsonNodeFactory.instance.numberNode(0.99));
+        if (attachmentPath != null && ! attachmentPath.trim().isEmpty()) {
+            model.set("dst.cue_image_path", attachmentPath);
+        }
 
         updateJsonTextArea();
         System.err.println("Augmented tweet: " + model.root.toString());
