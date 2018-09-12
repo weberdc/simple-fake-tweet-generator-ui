@@ -94,6 +94,7 @@ import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListCellRenderer;
+import javax.swing.ListModel;
 import javax.swing.SpinnerDateModel;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
@@ -184,7 +185,9 @@ public class SimpleTweetEditorUI extends JPanel {
     private static final Random R = new Random();
 
     private JComboBox<String> namePicker;
+    private JComboBox<String> langPicker;
     private JTextArea textArea;
+    private JTextArea transArea;
     private JCheckBox useGeoCheckbox;
     private JCheckBox addPlaceCheckbox;
     private GeoPanel geoPanel;
@@ -246,9 +249,9 @@ public class SimpleTweetEditorUI extends JPanel {
     private String freshTweetJson() {
         final String id = generateID();
         final String createdAt = now();
-        return "{\"coordinates\":{\"coordinates\":[-73.603184,45.495719],\"type\":\"Point\"}," +
+        return "{\"lang\":\"en\",\"coordinates\":{\"coordinates\":[-73.603184,45.495719],\"type\":\"Point\"}," +
             "\"created_at\":\""+ createdAt + "\",\"full_text\":\"\",\"id\":" + id +
-            ",\"id_str\":\"" + id + "\",\"text\":\"\",\"user\":{\"screen_name\":\"\",\"name\":\"\"}," +
+            ",\"id_str\":\"" + id + "\",\"text\":\"\",\"user\":{\"screen_name\":\"\",\"name\":\"\",\"lang\":\"en\"}," +
             "\"entities\":{\"media\":[{\"media_url_https\":\"\"}]}}";
     }
 
@@ -325,16 +328,28 @@ public class SimpleTweetEditorUI extends JPanel {
         gbc.insets = new Insets(0, 0, 5, 0);
         left.add(namePicker, gbc);
 
-        // Row 2: text field
+        // Row 2: text panel
         row++;
-        final JLabel textLabel = new JLabel("Tweet Text");
+        final JPanel textPanel = new JPanel(new GridBagLayout());
 
         gbc = new GridBagConstraints();
         gbc.gridy = row;
         gbc.gridx = 0;
-        gbc.anchor = GridBagConstraints.NORTH;
-        gbc.insets = new Insets(0, 0, 5, 5);
-        left.add(textLabel, gbc);
+        gbc.gridwidth = 2;
+        gbc.weightx = 1.0;
+        gbc.weighty = 0.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        left.add(textPanel, gbc);
+
+        final JLabel textLabel = new JLabel("Tweet Text");
+
+        gbc = new GridBagConstraints();
+        // gbc.gridy = row;
+        gbc.gridy = 0;
+        gbc.gridx = 0;
+        gbc.anchor = GridBagConstraints.NORTHWEST;
+        gbc.insets = new Insets(0, 5, 15, 5);
+        textPanel/*left*/.add(textLabel, gbc);
 
         textArea = new JTextArea(4, 30);
         textArea.setLineWrap(true);
@@ -352,18 +367,79 @@ public class SimpleTweetEditorUI extends JPanel {
         }
         textArea.setText(text != null ? text.toString() : "");
 
-        final JScrollPane scrollPane = new JScrollPane(textArea);
-        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-        scrollPane.setMinimumSize(new Dimension(150, 75));
+        final JScrollPane textScrollPane = new JScrollPane(textArea);
+        textScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        textScrollPane.setMinimumSize(new Dimension(150, 75));
 
         gbc = new GridBagConstraints();
-        gbc.gridy = row;
+        // gbc.gridy = row;
         gbc.gridx = 1;
         gbc.weightx = 1.0;
         gbc.weighty = 0.0;
+        gbc.gridheight = 3;
         gbc.insets = new Insets(0, 0, 5, 0);
         gbc.fill = GridBagConstraints.BOTH;
-        left.add(scrollPane, gbc);
+        textPanel/*left*/.add(textScrollPane, gbc);
+
+        final JLabel langLabel = new JLabel("Language");
+
+        gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.insets = new Insets(0, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.NORTHWEST;
+        textPanel.add(langLabel, gbc);
+
+        langPicker = new JComboBox(new String[]{"en", "fr"});
+        langPicker.setEditable(true);
+
+        gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        gbc.insets = new Insets(0, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.NORTHWEST;
+        // gbc.fill = GridBagConstraints.HORIZONTAL;
+        textPanel.add(langPicker, gbc);
+
+        final JLabel transLabel = new JLabel("Translation");
+
+        gbc = new GridBagConstraints();
+        gbc.gridy = 3;
+        gbc.gridx = 0;
+        gbc.anchor = GridBagConstraints.NORTHWEST;
+        gbc.insets = new Insets(5, 5, 5, 5);
+        textPanel/*left*/.add(transLabel, gbc);
+
+        transArea = new JTextArea(4, 30);
+        transArea.setLineWrap(true);
+        transArea.setWrapStyleWord(true);
+        Object trans = model.has("dst") && model.has("dst.translation") ? model.get("dst.translation") : model.get("full_text");
+        //Object text = model.get("full_text");
+        if (text == null || trans.toString().length() == 0) {
+            trans = model.get("extended_tweet.full_text");
+        }
+        if (text == null || trans.toString().length() == 0) {
+            trans = model.get("text");
+        }
+        if (trans != null && trans.toString().equals("\"\"")) {
+            // rescue us from the dreaded "" bug (must be Jackson)
+            trans = "";
+        }
+        transArea.setText(trans != null ? trans.toString() : "");
+
+        final JScrollPane transScrollPane = new JScrollPane(transArea);
+        transScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        transScrollPane.setMinimumSize(new Dimension(150, 75));
+
+        gbc = new GridBagConstraints();
+        // gbc.gridy = row;
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        gbc.weighty = 0.0;
+        gbc.gridheight = 3;
+        gbc.insets = new Insets(0, 0, 5, 0);
+        gbc.fill = GridBagConstraints.BOTH;
+        textPanel/*left*/.add(transScrollPane, gbc);
 
 
         // Row 3: Image URL
@@ -702,6 +778,30 @@ public class SimpleTweetEditorUI extends JPanel {
         textArea.getDocument().addDocumentListener(newUpdateOnChangeListener(() -> {
             updateModelAndUIWithNewText(textArea.getText());
         }));
+        transArea.getDocument().addDocumentListener(newUpdateOnChangeListener(() -> {
+            final String newTranslation = transArea.getText();
+            if (! model.has("dst")) {
+                model.set("dst", JsonNodeFactory.instance.objectNode());
+            }
+            model.set("dst.translation", newTranslation);
+            updateJsonTextArea();
+        }));
+        langPicker.addActionListener(e -> {
+            final String newLang = (String) langPicker.getSelectedItem();
+            final ListModel<String> languages = langPicker.getModel();
+            boolean found = false;
+            for (int i = 0; i < languages.getSize(); i++) {
+                if (languages.getElementAt(i).equals(newLang)) {
+                    found = true;
+                }
+            }
+            if (! found) {
+                langPicker.addItem(newLang);
+            }
+            model.set("lang", newLang);
+            model.set("user.lang", newLang);
+            updateJsonTextArea();
+        });
         mediaUrlButton.addActionListener(e -> {
             final Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
             try {
@@ -735,6 +835,7 @@ public class SimpleTweetEditorUI extends JPanel {
                 }
 
                 model.set("entities.media.[0].media_url_https", mediaUrl);
+                model.set("entities.media.[0].media_url", mediaUrl);
                 model.set("entities.media.[0].url", mediaUrl);
                 model.set("entities.media.[0].display_url", mediaUrl);
                 model.set("entities.media.[0].extended_url", mediaUrl);
@@ -927,8 +1028,8 @@ public class SimpleTweetEditorUI extends JPanel {
         System.err.println("Post to eliixar at " + eliixarAddr + " + " + attachmentPath);
 
         // augment tweet with DST content
-        final double lon = model.get("coordinates.coordinates[0]").asDouble(-73.5);
-        final double lat = model.get("coordinates.coordinates[1]").asDouble(45.5);
+        final double lon = geoPanel.getLatLon()[1];
+        final double lat = geoPanel.getLatLon()[0];
 
         if (! model.has("dst")) {
             model.set("dst", JsonNodeFactory.instance.objectNode());
@@ -1214,6 +1315,8 @@ public class SimpleTweetEditorUI extends JPanel {
             if (textArea.getText().equals("")) {
                 textArea.setText(model.get("text").asText(""));
             }
+            transArea.setText(model.get("dst.translation").asText(""));
+            langPicker.setSelectedItem(model.get("user.lang").asText(""));
             mediaUrlTF.setText(model.get("entities.media.[0].media_url_https").asText(""));
             idTF.setText(model.get("id_str").asText(""));
             tsPicker.setValue(parseCreatedAt());
