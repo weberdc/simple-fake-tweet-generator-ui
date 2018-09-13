@@ -938,9 +938,16 @@ public class SimpleTweetEditorUI extends JPanel {
                 File file = fc.getSelectedFile();
                 eliixarAttachmentLabel.setText(file.getPath());
                 eliixarAttachmentLabel.setToolTipText(file.getPath());
+                model.set("dst.cue_image_path", file.getPath());
+                updateJsonTextArea();
             }
         });
-        clearAttachmentButton.addActionListener(e -> eliixarAttachmentLabel.setText(""));
+        clearAttachmentButton.addActionListener(e -> {
+            eliixarAttachmentLabel.setText("");
+            ((ObjectNode) model.get("dst")).remove("cue_image_path");
+            // model.set("dst.cue_image_path", null);
+            updateJsonTextArea();
+        });
         postToEliixarAndKafkaButton.setEnabled(true);
         postToEliixarAndKafkaButton.addActionListener(e -> {
             try {
