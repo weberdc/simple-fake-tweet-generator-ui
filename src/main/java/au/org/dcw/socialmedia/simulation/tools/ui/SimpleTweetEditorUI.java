@@ -196,6 +196,7 @@ public class SimpleTweetEditorUI extends JPanel {
     private JSpinner tsPicker;
     private JTextField mediaUrlTF;
     private JCheckBox useCurrentTS;
+    private JLabel eliixarAttachmentLabel;
 
     private final SortedComboBoxModel nameCBModel = new SortedComboBoxModel(new String[]{""});
 
@@ -607,7 +608,7 @@ public class SimpleTweetEditorUI extends JPanel {
         postToEliixarButton.setToolTipText("Inserts the tweet into Eliixar");
         // - Image file attachment: file selector button and path label
         final JButton eliixarAttachmentButton = new JButton("Attach image...");
-        final JLabel eliixarAttachmentLabel = new JLabel();
+        eliixarAttachmentLabel = new JLabel();
         eliixarAttachmentLabel.setLabelFor(eliixarAttachmentButton);
         final JButton clearAttachmentButton = new JButton(removeIcon);
         clearAttachmentButton.setToolTipText("Clear the attached file");
@@ -1330,6 +1331,7 @@ public class SimpleTweetEditorUI extends JPanel {
             mediaUrlTF.setText(model.get("entities.media.[0].media_url_https").asText(""));
             idTF.setText(model.get("id_str").asText(""));
             tsPicker.setValue(parseCreatedAt());
+            useCurrentTS.setSelected(false);
             final String coords = model.get("coordinates.coordinates") == null
                 ? ""
                 : model.get("coordinates.coordinates").asText();
@@ -1344,6 +1346,11 @@ public class SimpleTweetEditorUI extends JPanel {
             }
             addPlaceCheckbox.setEnabled(! model.get("place").isNull());
             recursivelySetEnabled(geoPanel, useGeoCheckbox.isSelected());
+            if (model.has("dst")) {
+                if (model.has("dst.cue_image_path")) {
+                    eliixarAttachmentLabel.setText(model.get("dst.cue_image_path").asText());
+                }
+            }
         }
     }
 
